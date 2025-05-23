@@ -133,6 +133,38 @@ private:
     float lastSyncTime = 0.0f;
     const float SYNC_INTERVAL = 0.1f; // Sync every 100ms
 
+    // Sprite helper functions - MUST be defined before other functions that use them
+    void LoadSprites() {
+        spriteSheet = LoadTexture("robban.png");
+        if (spriteSheet.id > 0) {
+            spritesLoaded = true;
+            std::cout << "Sprite sheet loaded successfully" << std::endl;
+        } else {
+            std::cout << "Warning: Could not load robban.png, using fallback graphics" << std::endl;
+            spritesLoaded = false;
+        }
+    }
+    
+    void DrawSprite(SpriteIndex index, int x, int y, Color tint = WHITE) {
+        if (!spritesLoaded) return;
+        
+        SpriteRect rect = spriteRects[index];
+        Rectangle source = {
+            static_cast<float>(rect.x),
+            static_cast<float>(rect.y),
+            static_cast<float>(rect.width),
+            static_cast<float>(rect.height)
+        };
+        Rectangle dest = {
+            static_cast<float>(x),
+            static_cast<float>(y),
+            static_cast<float>(CELL_SIZE),
+            static_cast<float>(CELL_SIZE)
+        };
+        
+        DrawTexturePro(spriteSheet, source, dest, {0, 0}, 0.0f, tint);
+    }
+
     void SetupNetworking() {
         networkManager = std::make_unique<NetworkManager>();
         
