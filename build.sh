@@ -175,17 +175,52 @@ build_web() {
     check_cmake
     check_emscripten
     
+    # Check if CMakeLists.txt exists
+    if [ ! -f "CMakeLists.txt" ]; then
+        print_error "CMakeLists.txt not found in current directory"
+        print_info "Make sure you have all the required files"
+        exit 1
+    fi
+    
     # Create build directory
     mkdir -p build_web
     cd build_web
     
     # Configure with Emscripten
     print_info "Configuring with Emscripten..."
-    emcmake cmake -DCMAKE_BUILD_TYPE=${build_type} ..
+    if ! emcmake cmake -DCMAKE_BUILD_TYPE=${build_type} ..; then
+        print_error "Emscripten CMake configuration failed"
+        print_warning "This might be due to raylib X11 dependency issues in web builds"
+        print_info "Trying alternative configuration..."
+        
+        cd ..
+        
+        # Try alternative CMakeLists if X11 issues occur
+        if [ -f "CMakeLists-web.txt" ]; then
+            print_info "Using alternative web configuration..."
+            cd build_web
+            if ! emcmake cmake -DCMAKE_BUILD_TYPE=${build_type} -f ../CMakeLists-web.txt ..; then
+                print_error "Alternative configuration also failed"
+                cd ..
+                exit 1
+            fi
+        else
+            print_info "Possible solutions:"
+            echo "  1. Clean build directory: rm -rf build_web"
+            echo "  2. Make sure Emscripten is properly activated: source emsdk/emsdk_env.sh"
+            echo "  3. Try updating raylib version in CMakeLists.txt"
+            echo "  4. Use the alternative CMakeLists-web.txt if available"
+            exit 1
+        fi
+    fi
     
     # Build
     print_info "Building..."
-    emmake make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+    if ! emmake make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4); then
+        print_error "Emscripten build failed"
+        cd ..
+        exit 1
+    fi
     
     cd ..
     print_success "Web build complete!"
