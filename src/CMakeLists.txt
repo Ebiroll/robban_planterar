@@ -149,14 +149,19 @@ if(MSVC)
 else()
     target_compile_options(robban_planterar PRIVATE -Wall -Wextra -pedantic)
     
-    # Additional flags for Emscripten
-    if(PLATFORM_WEB)
-        target_compile_options(robban_planterar PRIVATE -s USE_GLFW=3)
-    endif()
+    # Remove the USE_GLFW from compile options - it's a linker flag
+    # if(PLATFORM_WEB)
+    #     target_compile_options(robban_planterar PRIVATE -s USE_GLFW=3)
+    # endif()
 endif()
 
-# Copy resources (if any)
-# file(COPY ${CMAKE_SOURCE_DIR}/resources DESTINATION ${CMAKE_BINARY_DIR})
+# Copy resources to build directory
+if(EXISTS "${CMAKE_SOURCE_DIR}/robban.png")
+    configure_file("${CMAKE_SOURCE_DIR}/robban.png" "${CMAKE_BINARY_DIR}/robban.png" COPYONLY)
+    message(STATUS "Copying robban.png to build directory")
+else()
+    message(WARNING "robban.png not found - game will use fallback graphics")
+endif()
 
 # For WebRTC support (disabled for web builds due to complexity)
 option(ENABLE_WEBRTC "Enable WebRTC networking" OFF)

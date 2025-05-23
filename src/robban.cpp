@@ -8,6 +8,40 @@
 #include <string>
 #include <algorithm>
 #include <iostream>
+#include <stdint.h>
+
+// Sprite definitions
+typedef struct {
+    uint16_t x;
+    uint16_t y;
+    uint16_t width;
+    uint16_t height;
+} SpriteRect;
+
+enum SpriteIndex {
+    SPRITE_PLAYER_GUN,
+    SPRITE_PLAYER_AXE,
+    SPRITE_PLAYER_PLANT,
+    SPRITE_TREE_SMALL,
+    SPRITE_TREE_LARGE,
+    SPRITE_RABBIT,
+    SPRITE_DEER,
+    SPRITE_RIFLE,
+    SPRITE_AXE,
+    SPRITE_COUNT
+};
+
+SpriteRect spriteRects[SPRITE_COUNT] = {
+    [SPRITE_PLAYER_GUN]   = {  0,  0, 20, 20 },
+    [SPRITE_PLAYER_AXE]   = { 20,  0, 20, 20 },
+    [SPRITE_PLAYER_PLANT] = { 40,  0, 20, 20 },
+    [SPRITE_TREE_SMALL]   = {100,  0, 20, 20 },
+    [SPRITE_TREE_LARGE]   = {120,  0, 20, 20 },
+    [SPRITE_RABBIT]       = { 40, 20, 20, 20 },
+    [SPRITE_DEER]         = { 60, 20, 20, 20 },
+    [SPRITE_RIFLE]        = {  0, 40, 20, 20 },
+    [SPRITE_AXE]          = { 20, 40, 20, 20 }
+};
 
 // Game constants
 const int GRID_WIDTH = 40;
@@ -84,6 +118,10 @@ private:
     float gameTime = 0.0f;
     int nextAnimalId = 0;
     int nextPlayerId = 1;
+    
+    // Sprite sheet
+    Texture2D spriteSheet;
+    bool spritesLoaded = false;
     
     // Networking
     std::unique_ptr<NetworkManager> networkManager;
@@ -366,50 +404,72 @@ private:
     }
 
     void DrawCell(int x, int y, const Cell& cell) {
+        // Draw background grass
         Rectangle rect = {
             static_cast<float>(x * CELL_SIZE), 
             static_cast<float>(y * CELL_SIZE), 
             static_cast<float>(CELL_SIZE), 
             static_cast<float>(CELL_SIZE)
         };
+        DrawRectangleRec(rect, DARKGREEN);
         
         switch (cell.type) {
             case CellType::EMPTY:
-                DrawRectangleRec(rect, DARKGREEN);
+                // Just grass background
                 break;
                 
             case CellType::SHRUBBERY:
-                DrawRectangleRec(rect, DARKGREEN);
-                DrawRectangle(x * CELL_SIZE + 2, y * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4, GREEN);
+                // Draw small vegetation as darker green patches
+                DrawRectangle(x * CELL_SIZE + 4, y * CELL_SIZE + 4, CELL_SIZE - 8, CELL_SIZE - 8, GREEN);
                 break;
                 
             case CellType::TREE_SEEDLING:
-            case CellType::TREE_YOUNG:
-            case CellType::TREE_MATURE: {
-                DrawRectangleRec(rect, DARKGREEN);
-                Color treeColor = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : GREEN;
-                
-                if (cell.type == CellType::TREE_SEEDLING) {
-                    DrawRectangle(x * CELL_SIZE + 8, y * CELL_SIZE + 8, 4, 4, treeColor);
-                } else if (cell.type == CellType::TREE_YOUNG) {
-                    DrawRectangle(x * CELL_SIZE + 6, y * CELL_SIZE + 6, 8, 8, treeColor);
+                if (spritesLoaded) {
+                    // Small tree sprite with player color tint
+                    Color tint = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : WHITE;
+                    DrawSprite(SPRITE_TREE_SMALL, x * CELL_SIZE, y * CELL_SIZE, tint);
                 } else {
+                    // Fallback: small colored square
+                    Color treeColor = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : GREEN;
+                    DrawRectangle(x * CELL_SIZE + 8, y * CELL_SIZE + 8, 4, 4, treeColor);
+                }
+                break;
+                
+            case CellType::TREE_YOUNG:
+                if (spritesLoaded) {
+                    // Medium tree sprite with player color tint
+                    Color tint = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : WHITE;
+                    DrawSprite(SPRITE_TREE_SMALL, x * CELL_SIZE, y * CELL_SIZE, tint);
+                } else {
+                    // Fallback: medium colored square
+                    Color treeColor = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : GREEN;
+                    DrawRectangle(x * CELL_SIZE + 6, y * CELL_SIZE + 6, 8, 8, treeColor);
+                }
+                break;
+                
+            case CellType::TREE_MATURE:
+                if (spritesLoaded) {
+                    // Large tree sprite with player color tint
+                    Color tint = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : WHITE;
+                    DrawSprite(SPRITE_TREE_LARGE, x * CELL_SIZE, y * CELL_SIZE, tint);
+                } else {
+                    // Fallback: large colored square
+                    Color treeColor = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : GREEN;
                     DrawRectangle(x * CELL_SIZE + 2, y * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4, treeColor);
                 }
                 break;
-            }
             
             case CellType::GRAVE: {
-                DrawRectangleRec(rect, DARKGREEN);
+                // Draw a tombstone-like shape or colored square for grave
                 Color graveColor = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : GRAY;
-                DrawRectangle(x * CELL_SIZE + 4, y * CELL_SIZE + 4, CELL_SIZE - 8, CELL_SIZE - 8, graveColor);
+                DrawRectangle(x * CELL_SIZE + 6, y * CELL_SIZE + 4, 8, 12, graveColor);
+                DrawRectangle(x * CELL_SIZE + 4, y * CELL_SIZE + 10, 12, 6, graveColor);
                 break;
             }
             
             case CellType::PLAYER:
             case CellType::ANIMAL:
                 // These are handled separately in DrawPlayer and DrawAnimal
-                DrawRectangleRec(rect, DARKGREEN);
                 break;
         }
     }
@@ -417,29 +477,52 @@ private:
     void DrawPlayer(const Player& player) {
         if (!player.alive) return;
         
+        // Draw grass background first
         Rectangle rect = {
             static_cast<float>(player.x * CELL_SIZE), 
             static_cast<float>(player.y * CELL_SIZE), 
             static_cast<float>(CELL_SIZE), 
             static_cast<float>(CELL_SIZE)
         };
-        DrawRectangleRec(rect, player.color);
+        DrawRectangleRec(rect, DARKGREEN);
         
-        // Draw mode indicator
-        const char* modeChar = "P";
-        if (player.mode == PlayerMode::SHOOT) modeChar = "S";
-        else if (player.mode == PlayerMode::CHOP) modeChar = "C";
-        
-        DrawText(modeChar, player.x * CELL_SIZE + 2, player.y * CELL_SIZE + 2, 16, BLACK);
+        // Draw appropriate player sprite based on mode
+        if (spritesLoaded) {
+            SpriteIndex spriteIndex;
+            switch (player.mode) {
+                case PlayerMode::PLANT:
+                    spriteIndex = SPRITE_PLAYER_PLANT;
+                    break;
+                case PlayerMode::SHOOT:
+                    spriteIndex = SPRITE_PLAYER_GUN;
+                    break;
+                case PlayerMode::CHOP:
+                    spriteIndex = SPRITE_PLAYER_AXE;
+                    break;
+            }
+            
+            // Draw player sprite with color tint
+            DrawSprite(spriteIndex, player.x * CELL_SIZE, player.y * CELL_SIZE, player.color);
+        } else {
+            // Fallback: colored rectangle with mode indicator
+            DrawRectangleRec(rect, player.color);
+            
+            const char* modeChar = "P";
+            if (player.mode == PlayerMode::SHOOT) modeChar = "S";
+            else if (player.mode == PlayerMode::CHOP) modeChar = "C";
+            
+            DrawText(modeChar, player.x * CELL_SIZE + 2, player.y * CELL_SIZE + 2, 16, BLACK);
+        }
         
         // Draw direction indicator for shooting mode
         if (player.mode == PlayerMode::SHOOT && (player.lastDirectionX != 0 || player.lastDirectionY != 0)) {
             int centerX = player.x * CELL_SIZE + CELL_SIZE / 2;
             int centerY = player.y * CELL_SIZE + CELL_SIZE / 2;
-            int endX = centerX + player.lastDirectionX * 8;
-            int endY = centerY + player.lastDirectionY * 8;
+            int endX = centerX + player.lastDirectionX * 12;
+            int endY = centerY + player.lastDirectionY * 12;
             
-            DrawLine(centerX, centerY, endX, endY, BLACK);
+            // Draw aiming line
+            DrawLine(centerX, centerY, endX, endY, RED);
             
             // Draw arrow head
             Vector2 v1, v2, v3;
@@ -460,25 +543,36 @@ private:
                 v2 = {static_cast<float>(endX-2), static_cast<float>(endY+4)};
                 v3 = {static_cast<float>(endX+2), static_cast<float>(endY+4)};
             }
-            DrawTriangle(v1, v2, v3, BLACK);
+            DrawTriangle(v1, v2, v3, RED);
         }
     }
 
     void DrawAnimal(const Animal& animal) {
+        // Draw grass background first
         Rectangle rect = {
             static_cast<float>(animal.x * CELL_SIZE), 
             static_cast<float>(animal.y * CELL_SIZE), 
             static_cast<float>(CELL_SIZE), 
             static_cast<float>(CELL_SIZE)
         };
-        Color animalColor = (animal.type == AnimalType::RABBIT) ? WHITE : BROWN;
-        DrawRectangle(animal.x * CELL_SIZE + 4, animal.y * CELL_SIZE + 4, CELL_SIZE - 8, CELL_SIZE - 8, animalColor);
+        DrawRectangleRec(rect, DARKGREEN);
+        
+        // Draw appropriate animal sprite
+        if (spritesLoaded) {
+            SpriteIndex spriteIndex = (animal.type == AnimalType::RABBIT) ? SPRITE_RABBIT : SPRITE_DEER;
+            DrawSprite(spriteIndex, animal.x * CELL_SIZE, animal.y * CELL_SIZE);
+        } else {
+            // Fallback: colored rectangle
+            Color animalColor = (animal.type == AnimalType::RABBIT) ? WHITE : BROWN;
+            DrawRectangle(animal.x * CELL_SIZE + 4, animal.y * CELL_SIZE + 4, CELL_SIZE - 8, CELL_SIZE - 8, animalColor);
+        }
     }
 
 public:
     RobbanPlanterar() : rng(std::chrono::steady_clock::now().time_since_epoch().count()) {
         InitializeGrid();
         SetupNetworking();
+        LoadSprites();
         
         // Add local player
         Player localPlayer;
@@ -486,6 +580,12 @@ public:
         localPlayer.color = PLAYER_COLORS[localPlayerId % 8];
         players[localPlayerId] = localPlayer;
         SpawnPlayer(localPlayerId);
+    }
+    
+    ~RobbanPlanterar() {
+        if (spritesLoaded) {
+            UnloadTexture(spriteSheet);
+        }
     }
 
     void Update() {
@@ -572,7 +672,7 @@ public:
         
         UpdateAnimals();
         UpdateTrees();
-        //SyncGameState();
+        SyncGameState();
         
         // Process network messages
         if (isMultiplayer && networkManager) {
@@ -611,7 +711,13 @@ public:
         DrawText(TextFormat("Mode: %s (P to switch)", modeText), 10, 35, 20, WHITE);
         DrawText("WASD/Arrows: Move, SPACE: Action", 10, 60, 16, WHITE);
         
+        // Show sprite loading status
+        if (!spritesLoaded) {
+            DrawText("Note: robban.png not found - using fallback graphics", 10, 80, 14, YELLOW);
+        }
+        
         // Show shooting direction
+        int uiOffset = spritesLoaded ? 80 : 100;
         if (players[localPlayerId].mode == PlayerMode::SHOOT) {
             const char* dirText = "No direction";
             if (players[localPlayerId].lastDirectionX > 0) dirText = "Shooting →";
@@ -619,21 +725,20 @@ public:
             else if (players[localPlayerId].lastDirectionY > 0) dirText = "Shooting ↓";
             else if (players[localPlayerId].lastDirectionY < 0) dirText = "Shooting ↑";
             
-            DrawText(dirText, 10, 80, 16, YELLOW);
+            DrawText(dirText, 10, uiOffset, 16, YELLOW);
+            uiOffset += 20;
         }
         
         // Multiplayer UI
         if (isMultiplayer && networkManager) {
-            int yOffset = players[localPlayerId].mode == PlayerMode::SHOOT ? 105 : 85;
-            DrawText(TextFormat("Room: %s", currentRoom.c_str()), 10, yOffset, 16, WHITE);
-            DrawText(TextFormat("Players: %d", networkManager->GetPlayerCount()), 10, yOffset + 20, 16, WHITE);
+            DrawText(TextFormat("Room: %s", currentRoom.c_str()), 10, uiOffset, 16, WHITE);
+            DrawText(TextFormat("Players: %d", networkManager->GetPlayerCount()), 10, uiOffset + 20, 16, WHITE);
             
             if (networkManager->IsHost()) {
-                DrawText("HOST", 10, yOffset + 40, 16, YELLOW);
+                DrawText("HOST", 10, uiOffset + 40, 16, YELLOW);
             }
         } else {
-            int yOffset = players[localPlayerId].mode == PlayerMode::SHOOT ? 105 : 85;
-            DrawText("Press H to host, J to join", 10, yOffset, 16, WHITE);
+            DrawText("Press H to host, J to join", 10, uiOffset, 16, WHITE);
         }
         
         EndDrawing();
@@ -652,74 +757,6 @@ public:
     void RemovePlayer(int playerId) {
         players.erase(playerId);
     }
-    
-    #if 0
-    // Networking helper functions
-    void SetupNetworking() {
-        networkManager = std::make_unique<NetworkManager>();
-        
-        // Set up network callbacks
-        networkManager->SetPlayerJoinCallback([this](int playerId) {
-            this->OnPlayerJoin(playerId);
-        });
-        
-        networkManager->SetPlayerLeaveCallback([this](int playerId) {
-            this->OnPlayerLeave(playerId);
-        });
-        
-        networkManager->SetPlayerUpdateCallback([this](const PlayerUpdate& update) {
-            this->OnPlayerUpdate(update);
-        });
-        
-        networkManager->SetPlayerActionCallback([this](const ActionMessage& action) {
-            this->OnPlayerAction(action);
-        });
-    }
-    
-    void OnPlayerJoin(int playerId) {
-        std::cout << "Player " << playerId << " joined the game" << std::endl;
-        AddPlayer(playerId);
-    }
-    
-    void OnPlayerLeave(int playerId) {
-        std::cout << "Player " << playerId << " left the game" << std::endl;
-        RemovePlayer(playerId);
-    }
-    
-    void OnPlayerUpdate(const PlayerUpdate& update) {
-        if (players.find(update.id) != players.end()) {
-            Player& player = players[update.id];
-            player.x = update.x;
-            player.y = update.y;
-            player.mode = static_cast<PlayerMode>(update.mode);
-            player.score = update.score;
-            player.alive = update.alive;
-        }
-    }
-    
-    void OnPlayerAction(const ActionMessage& action) {
-        HandlePlayerAction(action.playerId, action.targetX, action.targetY);
-    }
-    
-    void SyncGameState() {
-        if (!isMultiplayer || !networkManager || !networkManager->IsConnected()) return;
-        
-        if (gameTime - lastSyncTime > SYNC_INTERVAL) {
-            // Send local player update
-            Player& localPlayer = players[localPlayerId];
-            PlayerUpdate update;
-            update.id = localPlayerId;
-            update.x = localPlayer.x;
-            update.y = localPlayer.y;
-            update.mode = static_cast<int>(localPlayer.mode);
-            update.score = localPlayer.score;
-            update.alive = localPlayer.alive;
-            
-            networkManager->SendPlayerUpdate(update);
-            lastSyncTime = gameTime;
-        }
-    }
-#endif
 };
 
 int main() {
