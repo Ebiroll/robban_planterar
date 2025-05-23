@@ -4,7 +4,15 @@ Here is the original prompt:
 Create a multiuser game called Robban planterar. The Idea is to have an area covered by squares. In each square a player can plant a tree. Each player can either plant, fire a gun or chop down trees. The player switches mode by pressing a key p. The tree will grow slowly and each player have different colours for the trees. Before the tree is fully grown it can be eaten by rabbits or deer. The users can kill the animals or other players with the gun. When a person is killed there is a grave on that square with the colour of that player. The trees grows slowly but when they are big 1/2 full age the animals cannot eat it but the players can cut them down. You get points for cutting down trees or killing an animal. Players get negative points for shoting another player, but the player immediately respawns in one random corner when killed. You should be able to control movemets with the wasd keys or arrows. Animals are spawned at all times randomly. At startup there are some shrubbery in the forrest that the animals can eat but when a tree is planted the shrubbery is removed. I prefer to have this game use raylib and C++. The networking code can preferably use webrtc. Use the graphics below for inspiration.
 
 # Build/Install
-Building in 
+Building in visual studio codespace should be possible.
+./install-deps
+cd src
+../build.sh web
+
+You might have to do this first,
+cd emsdk
+source ./emsdk_env.sh
+
 
 # Robban Planterar 🌲
 

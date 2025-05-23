@@ -286,7 +286,7 @@ bool WebRTCConnection::CreateOffer(std::string& offer) {
     return true;
 }
 
-bool WebRTCConnection::CreateAnswer(const std::string& offer, std::string& answer) {
+bool WebRTCConnection::CreateAnswer(const std::string& /*offer*/, std::string& answer) {
     if (!peerConnection) return false;
     
     // In real implementation:
@@ -307,7 +307,7 @@ bool WebRTCConnection::CreateAnswer(const std::string& offer, std::string& answe
     return true;
 }
 
-bool WebRTCConnection::SetRemoteAnswer(const std::string& answer) {
+bool WebRTCConnection::SetRemoteAnswer(const std::string& /*answer*/) {
     if (!peerConnection) return false;
     
     // In real implementation:
@@ -323,7 +323,7 @@ bool WebRTCConnection::SetRemoteAnswer(const std::string& answer) {
     return true;
 }
 
-bool WebRTCConnection::SetRemoteOffer(const std::string& offer) {
+bool WebRTCConnection::SetRemoteOffer(const std::string& /*offer*/) {
     if (!peerConnection) return false;
     
     // In real implementation:

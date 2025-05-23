@@ -541,7 +541,7 @@ public:
         
         UpdateAnimals();
         UpdateTrees();
-        SyncGameState();
+        //SyncGameState();
         
         // Process network messages
         if (isMultiplayer && networkManager) {
@@ -622,6 +622,7 @@ public:
         players.erase(playerId);
     }
     
+    #if 0
     // Networking helper functions
     void SetupNetworking() {
         networkManager = std::make_unique<NetworkManager>();
@@ -687,6 +688,7 @@ public:
             lastSyncTime = gameTime;
         }
     }
+#endif
 };
 
 int main() {
