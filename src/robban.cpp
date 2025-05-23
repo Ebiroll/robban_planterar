@@ -32,15 +32,15 @@ enum SpriteIndex {
 };
 
 SpriteRect spriteRects[SPRITE_COUNT] = {
-    [SPRITE_PLAYER_GUN]   = {  0,  0, 20, 20 },
-    [SPRITE_PLAYER_AXE]   = { 20,  0, 20, 20 },
-    [SPRITE_PLAYER_PLANT] = { 40,  0, 20, 20 },
-    [SPRITE_TREE_SMALL]   = {100,  0, 20, 20 },
-    [SPRITE_TREE_LARGE]   = {120,  0, 20, 20 },
-    [SPRITE_RABBIT]       = { 40, 20, 20, 20 },
-    [SPRITE_DEER]         = { 60, 20, 20, 20 },
-    [SPRITE_RIFLE]        = {  0, 40, 20, 20 },
-    [SPRITE_AXE]          = { 20, 40, 20, 20 }
+    [SPRITE_PLAYER_GUN]   = {  32,  420, 257, 278 },  // Left player with gun
+    [SPRITE_PLAYER_AXE]   = { 392,  420, 165, 278 },  // Middle player with axe
+    [SPRITE_PLAYER_PLANT] = { 686,  420, 183, 278 },  // Right player with shovel
+    [SPRITE_TREE_SMALL]   = { 914,  456,  66,  84 },  // Small green bush/sapling
+    [SPRITE_TREE_LARGE]   = { 947,   98, 327, 388 },  // Large tree
+    [SPRITE_RABBIT]       = { 686,  734, 124,  84 },  // Gray rabbit
+    [SPRITE_DEER]         = { 980,  704, 274, 124 },  // Brown deer
+    [SPRITE_RIFLE]        = {  98,  774, 294,  54 },  // Black rifle
+    [SPRITE_AXE]          = { 824,  704,  89, 124 }   // Brown axe handle
 };
 
 // Game constants
@@ -712,7 +712,7 @@ public:
         
         UpdateAnimals();
         UpdateTrees();
-        SyncGameState();
+        //SyncGameState();
         
         // Process network messages
         if (isMultiplayer && networkManager) {
