@@ -138,7 +138,7 @@ private:
         spriteSheet = LoadTexture("robban.png");
         if (spriteSheet.id > 0) {
             spritesLoaded = true;
-            std::cout << "Sprite sheet loaded successfully" << std::endl;
+            std::cout << "Sprite sheet loaded successfully: " << spriteSheet.width << "x" << spriteSheet.height << std::endl;
         } else {
             std::cout << "Warning: Could not load robban.png, using fallback graphics" << std::endl;
             spritesLoaded = false;
@@ -146,9 +146,16 @@ private:
     }
     
     void DrawSprite(SpriteIndex index, int x, int y, Color tint = WHITE) {
-        if (!spritesLoaded) return;
+        if (!spritesLoaded || spriteSheet.id == 0) return;
         
         SpriteRect rect = spriteRects[index];
+        
+        // Validate sprite coordinates are within texture bounds  
+        if (rect.x + rect.width > spriteSheet.width || rect.y + rect.height > spriteSheet.height) {
+            std::cout << "Warning: Sprite " << index << " coordinates out of bounds" << std::endl;
+            return;
+        }
+        
         Rectangle source = {
             static_cast<float>(rect.x),
             static_cast<float>(rect.y),
@@ -615,8 +622,9 @@ public:
     }
     
     ~RobbanPlanterar() {
-        if (spritesLoaded) {
+        if (spritesLoaded && spriteSheet.id > 0) {
             UnloadTexture(spriteSheet);
+            spritesLoaded = false;
         }
     }
 
@@ -743,9 +751,11 @@ public:
         DrawText(TextFormat("Mode: %s (P to switch)", modeText), 10, 35, 20, WHITE);
         DrawText("WASD/Arrows: Move, SPACE: Action", 10, 60, 16, WHITE);
         
-        // Show sprite loading status
+        // Show sprite loading status and debug info
         if (!spritesLoaded) {
             DrawText("Note: robban.png not found - using fallback graphics", 10, 80, 14, YELLOW);
+        } else {
+            DrawText(TextFormat("Using sprites: %dx%d", spriteSheet.width, spriteSheet.height), 10, 80, 14, GREEN);
         }
         
         // Show shooting direction
