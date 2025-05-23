@@ -151,8 +151,8 @@
             <h3>🎮 Controls</h3>
             <div class="control-group">
                 <div class="control-item"><span class="key">WASD</span> or <span class="key">↑↓←→</span> Move</div>
+                <div class="control-item"><span class="key">SPACE</span> Action</div>
                 <div class="control-item"><span class="key">P</span> Switch Mode</div>
-                <div class="control-item"><span class="key">Mouse</span> Action</div>
             </div>
             <div class="control-group">
                 <div class="control-item"><span class="key">H</span> Host Game</div>
@@ -161,7 +161,7 @@
         </div>
         
         <div class="status" id="status">
-            🌱 Plant trees, 🔫 defend against animals, 🪓 harvest for points!
+            🌱 Plant trees, 🔫 shoot bullets in movement direction, 🪓 harvest for points!
         </div>
     </div>
 
@@ -234,7 +234,7 @@
         // Game-specific event handlers
         document.addEventListener('keydown', function(e) {
             // Prevent default browser shortcuts that might interfere
-            if (['KeyH', 'KeyJ', 'KeyP'].includes(e.code)) {
+            if (['KeyH', 'KeyJ', 'KeyP', 'Space'].includes(e.code)) {
                 e.preventDefault();
             }
         });

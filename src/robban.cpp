@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include "NetworkManager.h"
 #include <vector>
 #include <map>
 #include <random>
@@ -6,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <algorithm>
+#include <iostream>
 
 // Game constants
 const int GRID_WIDTH = 40;
@@ -59,6 +61,9 @@ struct Player {
     int score = 0;
     bool alive = true;
     float lastAction = 0.0f;
+    int lastDirectionX = 0; // For shooting direction
+    int lastDirectionY = 0;
+    float lastMove = 0.0f;  // For movement throttling
 };
 
 struct Animal {
@@ -78,7 +83,64 @@ private:
     std::mt19937 rng;
     float gameTime = 0.0f;
     int nextAnimalId = 0;
+    int nextPlayerId = 1;
+    
+    // Networking
+    std::unique_ptr<NetworkManager> networkManager;
+    bool isMultiplayer = false;
+    bool isHost = false;
+    std::string currentRoom;
+    
+    // Game state synchronization
+    float lastSyncTime = 0.0f;
+    const float SYNC_INTERVAL = 0.1f; // Sync every 100ms
 
+    void SetupNetworking() {
+        networkManager = std::make_unique<NetworkManager>();
+        
+        // Set up network callbacks
+        networkManager->SetPlayerJoinCallback([this](int playerId) {
+            this->OnPlayerJoin(playerId);
+        });
+        
+        networkManager->SetPlayerLeaveCallback([this](int playerId) {
+            this->OnPlayerLeave(playerId);
+        });
+        
+        networkManager->SetPlayerUpdateCallback([this](const PlayerUpdate& update) {
+            this->OnPlayerUpdate(update);
+        });
+        
+        networkManager->SetPlayerActionCallback([this](const ActionMessage& action) {
+            this->OnPlayerAction(action);
+        });
+    }
+    
+    void OnPlayerJoin(int playerId) {
+        std::cout << "Player " << playerId << " joined the game" << std::endl;
+        AddPlayer(playerId);
+    }
+    
+    void OnPlayerLeave(int playerId) {
+        std::cout << "Player " << playerId << " left the game" << std::endl;
+        RemovePlayer(playerId);
+    }
+    
+    void OnPlayerUpdate(const PlayerUpdate& update) {
+        if (players.find(update.id) != players.end()) {
+            Player& player = players[update.id];
+            player.x = update.x;
+            player.y = update.y;
+            player.mode = static_cast<PlayerMode>(update.mode);
+            player.score = update.score;
+            player.alive = update.alive;
+        }
+    }
+    
+    void OnPlayerAction(const ActionMessage& action) {
+        HandlePlayerAction(action.playerId, action.targetX, action.targetY);
+    }
+    
     void InitializeGrid() {
         grid.resize(GRID_HEIGHT, std::vector<Cell>(GRID_WIDTH));
         
@@ -197,17 +259,24 @@ private:
         
         Player& player = players[playerId];
         
-        // Check if target is adjacent or same cell
-        int dx = abs(targetX - player.x);
-        int dy = abs(targetY - player.y);
-        if (dx > 1 || dy > 1) return;
-        
-        if (targetX < 0 || targetX >= GRID_WIDTH || targetY < 0 || targetY >= GRID_HEIGHT) return;
-        
-        Cell& cell = grid[targetY][targetX];
+        // Prevent spam actions
+        if (gameTime - player.lastAction < 0.2f) return;
+        player.lastAction = gameTime;
         
         switch (player.mode) {
-            case PlayerMode::PLANT:
+            case PlayerMode::PLANT: {
+                // Plant at player's current location or adjacent cell
+                int plantX = targetX != -1 ? targetX : player.x;
+                int plantY = targetY != -1 ? targetY : player.y;
+                
+                // Check if target is adjacent or same cell
+                int dx = abs(plantX - player.x);
+                int dy = abs(plantY - player.y);
+                if (dx > 1 || dy > 1) return;
+                
+                if (plantX < 0 || plantX >= GRID_WIDTH || plantY < 0 || plantY >= GRID_HEIGHT) return;
+                
+                Cell& cell = grid[plantY][plantX];
                 if (cell.type == CellType::EMPTY || cell.type == CellType::SHRUBBERY) {
                     cell.type = CellType::TREE_SEEDLING;
                     cell.playerId = playerId;
@@ -215,8 +284,21 @@ private:
                     cell.lastUpdate = gameTime;
                 }
                 break;
+            }
                 
-            case PlayerMode::CHOP:
+            case PlayerMode::CHOP: {
+                // Chop at player's current location or adjacent cell
+                int chopX = targetX != -1 ? targetX : player.x;
+                int chopY = targetY != -1 ? targetY : player.y;
+                
+                // Check if target is adjacent or same cell
+                int dx = abs(chopX - player.x);
+                int dy = abs(chopY - player.y);
+                if (dx > 1 || dy > 1) return;
+                
+                if (chopX < 0 || chopX >= GRID_WIDTH || chopY < 0 || chopY >= GRID_HEIGHT) return;
+                
+                Cell& cell = grid[chopY][chopX];
                 if (cell.type == CellType::TREE_MATURE) {
                     cell.type = CellType::EMPTY;
                     cell.playerId = -1;
@@ -224,33 +306,62 @@ private:
                     player.score += 10;
                 }
                 break;
+            }
                 
-            case PlayerMode::SHOOT:
-                // Check for animals at target location
-                for (auto it = animals.begin(); it != animals.end(); ++it) {
-                    if (it->x == targetX && it->y == targetY) {
-                        player.score += 5;
-                        animals.erase(it);
-                        break;
-                    }
+            case PlayerMode::SHOOT: {
+                // Shoot in the direction the player last moved
+                int bulletX = player.x;
+                int bulletY = player.y;
+                int dirX = player.lastDirectionX;
+                int dirY = player.lastDirectionY;
+                
+                // If no direction set, default to right
+                if (dirX == 0 && dirY == 0) {
+                    dirX = 1;
                 }
                 
-                // Check for other players at target location
-                for (auto& [id, otherPlayer] : players) {
-                    if (id != playerId && otherPlayer.x == targetX && otherPlayer.y == targetY && otherPlayer.alive) {
-                        otherPlayer.alive = false;
-                        player.score -= 5;
-                        
-                        // Create grave
-                        grid[targetY][targetX].type = CellType::GRAVE;
-                        grid[targetY][targetX].playerId = id;
-                        
-                        // Respawn the killed player
-                        SpawnPlayer(id);
-                        break;
+                // Trace bullet path until it hits something or goes out of bounds
+                for (int range = 1; range <= 10; range++) {
+                    int checkX = bulletX + (dirX * range);
+                    int checkY = bulletY + (dirY * range);
+                    
+                    if (checkX < 0 || checkX >= GRID_WIDTH || checkY < 0 || checkY >= GRID_HEIGHT) {
+                        break; // Out of bounds
+                    }
+                    
+                    // Check for animals at this location
+                    for (auto it = animals.begin(); it != animals.end(); ++it) {
+                        if (it->x == checkX && it->y == checkY) {
+                            player.score += 5;
+                            animals.erase(it);
+                            return; // Bullet stops after hitting animal
+                        }
+                    }
+                    
+                    // Check for other players at this location
+                    for (auto& [id, otherPlayer] : players) {
+                        if (id != playerId && otherPlayer.x == checkX && otherPlayer.y == checkY && otherPlayer.alive) {
+                            otherPlayer.alive = false;
+                            player.score -= 5;
+                            
+                            // Create grave
+                            grid[checkY][checkX].type = CellType::GRAVE;
+                            grid[checkY][checkX].playerId = id;
+                            
+                            // Respawn the killed player
+                            SpawnPlayer(id);
+                            return; // Bullet stops after hitting player
+                        }
+                    }
+                    
+                    // Check for obstacles (trees)
+                    Cell& cell = grid[checkY][checkX];
+                    if (cell.type == CellType::TREE_MATURE || cell.type == CellType::TREE_YOUNG) {
+                        break; // Bullet stops at tree
                     }
                 }
                 break;
+            }
         }
     }
 
@@ -304,6 +415,27 @@ private:
         else if (player.mode == PlayerMode::CHOP) modeChar = "C";
         
         DrawText(modeChar, player.x * CELL_SIZE + 2, player.y * CELL_SIZE + 2, 16, BLACK);
+        
+        // Draw direction indicator for shooting mode
+        if (player.mode == PlayerMode::SHOOT && (player.lastDirectionX != 0 || player.lastDirectionY != 0)) {
+            int centerX = player.x * CELL_SIZE + CELL_SIZE / 2;
+            int centerY = player.y * CELL_SIZE + CELL_SIZE / 2;
+            int endX = centerX + player.lastDirectionX * 8;
+            int endY = centerY + player.lastDirectionY * 8;
+            
+            DrawLine(centerX, centerY, endX, endY, BLACK);
+            
+            // Draw arrow head
+            if (player.lastDirectionX > 0) { // Right
+                DrawTriangle({endX, endY}, {endX-4, endY-2}, {endX-4, endY+2}, BLACK);
+            } else if (player.lastDirectionX < 0) { // Left
+                DrawTriangle({endX, endY}, {endX+4, endY-2}, {endX+4, endY+2}, BLACK);
+            } else if (player.lastDirectionY > 0) { // Down
+                DrawTriangle({endX, endY}, {endX-2, endY-4}, {endX+2, endY-4}, BLACK);
+            } else if (player.lastDirectionY < 0) { // Up
+                DrawTriangle({endX, endY}, {endX-2, endY+4}, {endX+2, endY+4}, BLACK);
+            }
+        }
     }
 
     void DrawAnimal(const Animal& animal) {
@@ -315,6 +447,7 @@ private:
 public:
     RobbanPlanterar() : rng(std::chrono::steady_clock::now().time_since_epoch().count()) {
         InitializeGrid();
+        SetupNetworking();
         
         // Add local player
         Player localPlayer;
@@ -329,6 +462,27 @@ public:
         
         Player& localPlayer = players[localPlayerId];
         
+        // Network controls
+        if (!isMultiplayer) {
+            if (IsKeyPressed(KEY_H)) {
+                // Host a game
+                currentRoom = "RobbanRoom";
+                if (networkManager->CreateRoom(currentRoom)) {
+                    isMultiplayer = true;
+                    isHost = true;
+                    std::cout << "Hosting room: " << networkManager->GetRoomId() << std::endl;
+                }
+            } else if (IsKeyPressed(KEY_J)) {
+                // Join a game (simplified - in real version would show input dialog)
+                currentRoom = "RobbanRoom_1234"; // Example room ID
+                if (networkManager->JoinRoom(currentRoom)) {
+                    isMultiplayer = true;
+                    isHost = false;
+                    std::cout << "Joining room: " << currentRoom << std::endl;
+                }
+            }
+        }
+        
         // Handle input
         if (IsKeyPressed(KEY_P)) {
             switch (localPlayer.mode) {
@@ -336,32 +490,63 @@ public:
                 case PlayerMode::SHOOT: localPlayer.mode = PlayerMode::CHOP; break;
                 case PlayerMode::CHOP: localPlayer.mode = PlayerMode::PLANT; break;
             }
+            
+            // Send mode change to network
+            if (isMultiplayer && networkManager && networkManager->IsConnected()) {
+                networkManager->SendPlayerModeChange(localPlayerId, static_cast<int>(localPlayer.mode));
+            }
         }
         
-        // Movement
+        // Movement with throttling for better control
         int newX = localPlayer.x;
         int newY = localPlayer.y;
+        int moveX = 0, moveY = 0;
         
-        if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)) newY--;
-        if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) newY++;
-        if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT)) newX--;
-        if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT)) newX++;
+        // Check for movement input
+        if (IsKeyPressed(KEY_W) || IsKeyPressed(KEY_UP)) { moveY = -1; }
+        if (IsKeyPressed(KEY_S) || IsKeyPressed(KEY_DOWN)) { moveY = 1; }
+        if (IsKeyPressed(KEY_A) || IsKeyPressed(KEY_LEFT)) { moveX = -1; }
+        if (IsKeyPressed(KEY_D) || IsKeyPressed(KEY_RIGHT)) { moveX = 1; }
         
-        if (newX >= 0 && newX < GRID_WIDTH && newY >= 0 && newY < GRID_HEIGHT) {
-            localPlayer.x = newX;
-            localPlayer.y = newY;
+        // Apply movement if within bounds
+        if (moveX != 0 || moveY != 0) {
+            newX += moveX;
+            newY += moveY;
+            
+            if (newX >= 0 && newX < GRID_WIDTH && newY >= 0 && newY < GRID_HEIGHT) {
+                localPlayer.x = newX;
+                localPlayer.y = newY;
+                
+                // Update direction for shooting
+                localPlayer.lastDirectionX = moveX;
+                localPlayer.lastDirectionY = moveY;
+                localPlayer.lastMove = gameTime;
+            }
         }
         
-        // Action
-        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            Vector2 mousePos = GetMousePosition();
-            int targetX = (int)(mousePos.x / CELL_SIZE);
-            int targetY = (int)(mousePos.y / CELL_SIZE);
-            HandlePlayerAction(localPlayerId, targetX, targetY);
+        // Action with spacebar
+        if (IsKeyPressed(KEY_SPACE)) {
+            HandlePlayerAction(localPlayerId, -1, -1); // Use -1 to indicate current position
+            
+            // Send action to network if multiplayer
+            if (isMultiplayer && networkManager && networkManager->IsConnected()) {
+                ActionMessage action;
+                action.playerId = localPlayerId;
+                action.targetX = localPlayer.x;
+                action.targetY = localPlayer.y;
+                action.actionType = static_cast<int>(localPlayer.mode);
+                networkManager->SendPlayerAction(action);
+            }
         }
         
         UpdateAnimals();
         UpdateTrees();
+        SyncGameState();
+        
+        // Process network messages
+        if (isMultiplayer && networkManager) {
+            networkManager->ProcessMessages();
+        }
     }
 
     void Draw() {
@@ -393,7 +578,32 @@ public:
         else if (players[localPlayerId].mode == PlayerMode::CHOP) modeText = "Chop";
         
         DrawText(TextFormat("Mode: %s (P to switch)", modeText), 10, 35, 20, WHITE);
-        DrawText("WASD/Arrows: Move, Mouse: Action", 10, 60, 16, WHITE);
+        DrawText("WASD/Arrows: Move, SPACE: Action", 10, 60, 16, WHITE);
+        
+        // Show shooting direction
+        if (players[localPlayerId].mode == PlayerMode::SHOOT) {
+            const char* dirText = "No direction";
+            if (players[localPlayerId].lastDirectionX > 0) dirText = "Shooting →";
+            else if (players[localPlayerId].lastDirectionX < 0) dirText = "Shooting ←";
+            else if (players[localPlayerId].lastDirectionY > 0) dirText = "Shooting ↓";
+            else if (players[localPlayerId].lastDirectionY < 0) dirText = "Shooting ↑";
+            
+            DrawText(dirText, 10, 80, 16, YELLOW);
+        }
+        
+        // Multiplayer UI
+        if (isMultiplayer && networkManager) {
+            int yOffset = players[localPlayerId].mode == PlayerMode::SHOOT ? 105 : 85;
+            DrawText(TextFormat("Room: %s", currentRoom.c_str()), 10, yOffset, 16, WHITE);
+            DrawText(TextFormat("Players: %d", networkManager->GetPlayerCount()), 10, yOffset + 20, 16, WHITE);
+            
+            if (networkManager->IsHost()) {
+                DrawText("HOST", 10, yOffset + 40, 16, YELLOW);
+            }
+        } else {
+            int yOffset = players[localPlayerId].mode == PlayerMode::SHOOT ? 105 : 85;
+            DrawText("Press H to host, J to join", 10, yOffset, 16, WHITE);
+        }
         
         EndDrawing();
     }
@@ -410,6 +620,72 @@ public:
 
     void RemovePlayer(int playerId) {
         players.erase(playerId);
+    }
+    
+    // Networking helper functions
+    void SetupNetworking() {
+        networkManager = std::make_unique<NetworkManager>();
+        
+        // Set up network callbacks
+        networkManager->SetPlayerJoinCallback([this](int playerId) {
+            this->OnPlayerJoin(playerId);
+        });
+        
+        networkManager->SetPlayerLeaveCallback([this](int playerId) {
+            this->OnPlayerLeave(playerId);
+        });
+        
+        networkManager->SetPlayerUpdateCallback([this](const PlayerUpdate& update) {
+            this->OnPlayerUpdate(update);
+        });
+        
+        networkManager->SetPlayerActionCallback([this](const ActionMessage& action) {
+            this->OnPlayerAction(action);
+        });
+    }
+    
+    void OnPlayerJoin(int playerId) {
+        std::cout << "Player " << playerId << " joined the game" << std::endl;
+        AddPlayer(playerId);
+    }
+    
+    void OnPlayerLeave(int playerId) {
+        std::cout << "Player " << playerId << " left the game" << std::endl;
+        RemovePlayer(playerId);
+    }
+    
+    void OnPlayerUpdate(const PlayerUpdate& update) {
+        if (players.find(update.id) != players.end()) {
+            Player& player = players[update.id];
+            player.x = update.x;
+            player.y = update.y;
+            player.mode = static_cast<PlayerMode>(update.mode);
+            player.score = update.score;
+            player.alive = update.alive;
+        }
+    }
+    
+    void OnPlayerAction(const ActionMessage& action) {
+        HandlePlayerAction(action.playerId, action.targetX, action.targetY);
+    }
+    
+    void SyncGameState() {
+        if (!isMultiplayer || !networkManager || !networkManager->IsConnected()) return;
+        
+        if (gameTime - lastSyncTime > SYNC_INTERVAL) {
+            // Send local player update
+            Player& localPlayer = players[localPlayerId];
+            PlayerUpdate update;
+            update.id = localPlayerId;
+            update.x = localPlayer.x;
+            update.y = localPlayer.y;
+            update.mode = static_cast<int>(localPlayer.mode);
+            update.score = localPlayer.score;
+            update.alive = localPlayer.alive;
+            
+            networkManager->SendPlayerUpdate(update);
+            lastSyncTime = gameTime;
+        }
     }
 };
 

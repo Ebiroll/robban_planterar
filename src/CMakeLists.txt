@@ -40,7 +40,7 @@ FetchContent_MakeAvailable(raylib)
 
 # Add executable
 add_executable(robban_planterar
-    main.cpp
+    robban.cpp
     NetworkManager.cpp
 )
 
