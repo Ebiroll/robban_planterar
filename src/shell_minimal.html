@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robban Planterar</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #2d5a27, #4a7c59);
+            font-family: 'Courier New', monospace;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        .game-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #90EE90;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #B8E6B8;
+            margin-bottom: 20px;
+            font-style: italic;
+        }
+        
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border: 3px solid #4a7c59;
+            border-radius: 5px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        }
+        
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .controls h3 {
+            color: #90EE90;
+            margin-top: 0;
+        }
+        
+        .control-group {
+            display: inline-block;
+            margin: 0 15px;
+            text-align: left;
+        }
+        
+        .control-item {
+            margin: 5px 0;
+        }
+        
+        .key {
+            background: #4a7c59;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .status {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #B8E6B8;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #90EE90;
+            font-size: 18px;
+        }
+        
+        .spinner {
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #90EE90;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            color: #ff6b6b;
+            background: rgba(255, 107, 107, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            margin-top: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .game-container {
+                padding: 10px;
+                margin: 10px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+            
+            .control-group {
+                display: block;
+                margin: 10px 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🌲 Robban Planterar 🌲</h1>
+        <p class="subtitle">Multiplayer Tree Planting Adventure</p>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Loading game...</p>
+        </div>
+        
+        <canvas id="canvas" style="display: none;" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+        
+        <div class="controls">
+            <h3>🎮 Controls</h3>
+            <div class="control-group">
+                <div class="control-item"><span class="key">WASD</span> or <span class="key">↑↓←→</span> Move</div>
+                <div class="control-item"><span class="key">P</span> Switch Mode</div>
+                <div class="control-item"><span class="key">Mouse</span> Action</div>
+            </div>
+            <div class="control-group">
+                <div class="control-item"><span class="key">H</span> Host Game</div>
+                <div class="control-item"><span class="key">J</span> Join Game</div>
+            </div>
+        </div>
+        
+        <div class="status" id="status">
+            🌱 Plant trees, 🔫 defend against animals, 🪓 harvest for points!
+        </div>
+    </div>
+
+    <script type='text/javascript'>
+        var statusElement = document.getElementById('status');
+        var loadingElement = document.getElementById('loading');
+        var canvas = document.getElementById('canvas');
+        
+        var Module = {
+            preRun: [],
+            postRun: [],
+            print: function(text) {
+                console.log('[Game]', text);
+            },
+            printErr: function(text) {
+                console.error('[Game Error]', text);
+                if (text.includes('Error') || text.includes('error')) {
+                    statusElement.innerHTML = '<div class="error">⚠️ ' + text + '</div>';
+                }
+            },
+            canvas: (function() {
+                return canvas;
+            })(),
+            setStatus: function(text) {
+                if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+                if (text === Module.setStatus.last.text) return;
+                
+                var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+                var now = Date.now();
+                
+                if (m && now - Module.setStatus.last.time < 30) return; // if this is a progress update, skip it if too soon
+                Module.setStatus.last.time = now;
+                Module.setStatus.last.text = text;
+                
+                if (text) {
+                    console.log('[Status]', text);
+                    statusElement.textContent = text;
+                } else {
+                    loadingElement.style.display = 'none';
+                    canvas.style.display = 'block';
+                    statusElement.innerHTML = '🎮 Game loaded! Start planting trees!';
+                }
+            },
+            totalDependencies: 0,
+            monitorRunDependencies: function(left) {
+                this.totalDependencies = Math.max(this.totalDependencies, left);
+                Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+            }
+        };
+        
+        Module.setStatus('Downloading...');
+        window.onerror = function() {
+            Module.setStatus('Exception thrown, see JavaScript console');
+            loadingElement.style.display = 'none';
+            statusElement.innerHTML = '<div class="error">❌ Failed to load game. Check browser console for details.</div>';
+        };
+        
+        // Focus canvas for keyboard input
+        canvas.addEventListener('click', function() {
+            canvas.focus();
+        });
+        
+        // Prevent zoom on mobile
+        document.addEventListener('touchstart', function(e) {
+            if (e.touches.length > 1) {
+                e.preventDefault();
+            }
+        });
+        
+        // Game-specific event handlers
+        document.addEventListener('keydown', function(e) {
+            // Prevent default browser shortcuts that might interfere
+            if (['KeyH', 'KeyJ', 'KeyP'].includes(e.code)) {
+                e.preventDefault();
+            }
+        });
+    </script>
+    
+    {{{ SCRIPT }}}
+</body>
+</html>
