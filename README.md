@@ -13,6 +13,12 @@ You might have to do this first,
 cd emsdk
 source ./emsdk_env.sh
 
+# Running in Codespace
+Here is some info on port forward.
+https://docs.github.com/en/codespaces/developing-in-a-codespace/forwarding-ports-in-your-codespace
+9
+
+When an application running inside a codespace outputs a port to the console, Codespaces detects the localhost URL pattern and automatically forwards those ports. You can click on the URL in the terminal to open it in a browser
 
 # Robban Planterar 🌲
 
