@@ -198,7 +198,7 @@ private:
                     {0, 1}, {0, -1}, {1, 0}, {-1, 0}
                 };
                 
-                std::random_shuffle(moves.begin(), moves.end());
+                std::shuffle(moves.begin(), moves.end(), rng);
                 
                 for (auto move : moves) {
                     int testX = animal.x + move.first;
@@ -366,7 +366,12 @@ private:
     }
 
     void DrawCell(int x, int y, const Cell& cell) {
-        Rectangle rect = {x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE};
+        Rectangle rect = {
+            static_cast<float>(x * CELL_SIZE), 
+            static_cast<float>(y * CELL_SIZE), 
+            static_cast<float>(CELL_SIZE), 
+            static_cast<float>(CELL_SIZE)
+        };
         
         switch (cell.type) {
             case CellType::EMPTY:
@@ -400,13 +405,24 @@ private:
                 DrawRectangle(x * CELL_SIZE + 4, y * CELL_SIZE + 4, CELL_SIZE - 8, CELL_SIZE - 8, graveColor);
                 break;
             }
+            
+            case CellType::PLAYER:
+            case CellType::ANIMAL:
+                // These are handled separately in DrawPlayer and DrawAnimal
+                DrawRectangleRec(rect, DARKGREEN);
+                break;
         }
     }
 
     void DrawPlayer(const Player& player) {
         if (!player.alive) return;
         
-        Rectangle rect = {player.x * CELL_SIZE, player.y * CELL_SIZE, CELL_SIZE, CELL_SIZE};
+        Rectangle rect = {
+            static_cast<float>(player.x * CELL_SIZE), 
+            static_cast<float>(player.y * CELL_SIZE), 
+            static_cast<float>(CELL_SIZE), 
+            static_cast<float>(CELL_SIZE)
+        };
         DrawRectangleRec(rect, player.color);
         
         // Draw mode indicator
@@ -426,20 +442,35 @@ private:
             DrawLine(centerX, centerY, endX, endY, BLACK);
             
             // Draw arrow head
+            Vector2 v1, v2, v3;
             if (player.lastDirectionX > 0) { // Right
-                DrawTriangle({endX, endY}, {endX-4, endY-2}, {endX-4, endY+2}, BLACK);
+                v1 = {static_cast<float>(endX), static_cast<float>(endY)};
+                v2 = {static_cast<float>(endX-4), static_cast<float>(endY-2)};
+                v3 = {static_cast<float>(endX-4), static_cast<float>(endY+2)};
             } else if (player.lastDirectionX < 0) { // Left
-                DrawTriangle({endX, endY}, {endX+4, endY-2}, {endX+4, endY+2}, BLACK);
+                v1 = {static_cast<float>(endX), static_cast<float>(endY)};
+                v2 = {static_cast<float>(endX+4), static_cast<float>(endY-2)};
+                v3 = {static_cast<float>(endX+4), static_cast<float>(endY+2)};
             } else if (player.lastDirectionY > 0) { // Down
-                DrawTriangle({endX, endY}, {endX-2, endY-4}, {endX+2, endY-4}, BLACK);
+                v1 = {static_cast<float>(endX), static_cast<float>(endY)};
+                v2 = {static_cast<float>(endX-2), static_cast<float>(endY-4)};
+                v3 = {static_cast<float>(endX+2), static_cast<float>(endY-4)};
             } else if (player.lastDirectionY < 0) { // Up
-                DrawTriangle({endX, endY}, {endX-2, endY+4}, {endX+2, endY+4}, BLACK);
+                v1 = {static_cast<float>(endX), static_cast<float>(endY)};
+                v2 = {static_cast<float>(endX-2), static_cast<float>(endY+4)};
+                v3 = {static_cast<float>(endX+2), static_cast<float>(endY+4)};
             }
+            DrawTriangle(v1, v2, v3, BLACK);
         }
     }
 
     void DrawAnimal(const Animal& animal) {
-        Rectangle rect = {animal.x * CELL_SIZE, animal.y * CELL_SIZE, CELL_SIZE, CELL_SIZE};
+        Rectangle rect = {
+            static_cast<float>(animal.x * CELL_SIZE), 
+            static_cast<float>(animal.y * CELL_SIZE), 
+            static_cast<float>(CELL_SIZE), 
+            static_cast<float>(CELL_SIZE)
+        };
         Color animalColor = (animal.type == AnimalType::RABBIT) ? WHITE : BROWN;
         DrawRectangle(animal.x * CELL_SIZE + 4, animal.y * CELL_SIZE + 4, CELL_SIZE - 8, CELL_SIZE - 8, animalColor);
     }
