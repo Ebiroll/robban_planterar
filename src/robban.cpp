@@ -10,6 +10,8 @@
 #include <iostream>
 #include <stdint.h>
 
+// Normal game mode
+
 // Sprite definitions
 typedef struct {
     uint16_t x;
@@ -31,27 +33,121 @@ enum SpriteIndex {
     SPRITE_COUNT
 };
 
+
 SpriteRect spriteRects[SPRITE_COUNT] = {
-    [SPRITE_PLAYER_GUN]   = {  32,  420, 257, 278 },  // Left player with gun
-    [SPRITE_PLAYER_AXE]   = { 392,  420, 165, 278 },  // Middle player with axe
-    [SPRITE_PLAYER_PLANT] = { 686,  420, 183, 278 },  // Right player with shovel
-    [SPRITE_TREE_SMALL]   = { 914,  456,  66,  84 },  // Small green bush/sapling
-    [SPRITE_TREE_LARGE]   = { 947,   98, 327, 388 },  // Large tree
-    [SPRITE_RABBIT]       = { 686,  734, 124,  84 },  // Gray rabbit
-    [SPRITE_DEER]         = { 980,  704, 274, 124 },  // Brown deer
-    [SPRITE_RIFLE]        = {  98,  774, 294,  54 },  // Black rifle
-    [SPRITE_AXE]          = { 824,  704,  89, 124 }   // Brown axe handle
+    // Let's start with very simple coordinates from the top-left
+    // Using small squares that should definitely be safe
+    [SPRITE_PLAYER_GUN]   = {   32,   480,  350,  320 },  // Top-left corner
+    [SPRITE_PLAYER_AXE]   = {  446,   480,  345,  322 },  // Next to it  
+    [SPRITE_PLAYER_PLANT] = { 780,   480,  336,  327 },  // Next to that
+    [SPRITE_TREE_SMALL]   = { 100,   0,  210,  368 },  // Small tree
+    [SPRITE_TREE_LARGE]   = { 380,   30,  280,  400 },  // Large tree
+    [SPRITE_RABBIT]       = { 780,  840,  206,  180 },  
+    [SPRITE_DEER]         = { 1070, 790,  265,  230 },  
+    [SPRITE_RIFLE]        = { 30,  874,  310,  145 },  
+    [SPRITE_AXE]          = { 690,  530,  60,  224 }  
 };
 
+
+#ifdef UNIT_TEST
+// Unit test mode - just display all sprites for debugging
+class SpriteTest {
+private:
+    Texture2D spriteSheet;
+    bool spritesLoaded = false;
+    
+public:
+    SpriteTest() {
+        spriteSheet = LoadTexture("robban.png");
+        if (spriteSheet.id > 0) {
+            spritesLoaded = true;
+            std::cout << "Sprite test: loaded " << spriteSheet.width << "x" << spriteSheet.height << std::endl;
+        }
+    }
+    
+    ~SpriteTest() {
+        if (spritesLoaded) UnloadTexture(spriteSheet);
+    }
+    
+    void Draw() {
+        BeginDrawing();
+        ClearBackground(DARKGRAY);
+        
+        if (!spritesLoaded) {
+            DrawText("robban.png not found!", 10, 10, 20, RED);
+            EndDrawing();
+            return;
+        }
+        
+        DrawText(TextFormat("Sprite Sheet: %dx%d", spriteSheet.width, spriteSheet.height), 10, 10, 20, WHITE);
+        DrawText("Press ESC to quit", 10, 35, 16, WHITE);
+        
+        // Draw all sprites in a grid with labels
+        const char* spriteNames[] = {
+            "PLAYER_GUN", "PLAYER_AXE", "PLAYER_PLANT", "TREE_SMALL", "TREE_LARGE",
+            "RABBIT", "DEER", "RIFLE", "AXE"
+        };
+        
+        for (int i = 0; i < SPRITE_COUNT; i++) {
+            int row = i / 3;
+            int col = i % 3;
+            int x = 50 + col * 300;
+            int y = 80 + row * 200;
+            
+            SpriteRect rect = spriteRects[i];
+            
+            // Draw sprite info
+            DrawText(TextFormat("%s", spriteNames[i]), x, y - 20, 12, WHITE);
+            DrawText(TextFormat("(%d,%d) %dx%d", rect.x, rect.y, rect.width, rect.height), x, y - 5, 10, LIGHTGRAY);
+            
+            // Draw the sprite
+            if (rect.x + rect.width <= spriteSheet.width && rect.y + rect.height <= spriteSheet.height) {
+                Rectangle source = {
+                    static_cast<float>(rect.x), static_cast<float>(rect.y),
+                    static_cast<float>(rect.width), static_cast<float>(rect.height)
+                };
+                Rectangle dest = {
+                    static_cast<float>(x), static_cast<float>(y),
+                    128.0f, 128.0f  // Fixed display size
+                };
+                
+                DrawTexturePro(spriteSheet, source, dest, {0, 0}, 0.0f, WHITE);
+                DrawRectangleLines(x, y, 128, 128, GREEN);
+            } else {
+                DrawRectangle(x, y, 128, 128, RED);
+                DrawText("OUT OF BOUNDS", x + 10, y + 60, 12, WHITE);
+            }
+        }
+        
+        EndDrawing();
+    }
+};
+
+int main() {
+    InitWindow(1000, 800, "Sprite Test - Robban Planterar");
+    SetTargetFPS(60);
+    
+    SpriteTest test;
+    
+    while (!WindowShouldClose()) {
+        test.Draw();
+    }
+    
+    CloseWindow();
+    return 0;
+}
+#else
+
+
 // Game constants
-const int GRID_WIDTH = 40;
-const int GRID_HEIGHT = 30;
-const int CELL_SIZE = 20;
-const int WINDOW_WIDTH = GRID_WIDTH * CELL_SIZE;
-const int WINDOW_HEIGHT = GRID_HEIGHT * CELL_SIZE;
+const int GRID_WIDTH = 30;     // Reduced from 40
+const int GRID_HEIGHT = 20;    // Reduced from 30
+const int CELL_SIZE = 40;      // Doubled from 20
+const int WINDOW_WIDTH = GRID_WIDTH * CELL_SIZE;   // Now 1200px
+const int WINDOW_HEIGHT = GRID_HEIGHT * CELL_SIZE; // Now 800px
 const float TREE_GROWTH_TIME = 10.0f; // seconds
 const float ANIMAL_SPAWN_RATE = 0.02f; // probability per frame
-const int MAX_ANIMALS = 20;
+const int MAX_ANIMALS = 15;    // Reduced proportionally
 
 // Player colors
 const Color PLAYER_COLORS[] = {
@@ -108,11 +204,20 @@ struct Animal {
     int id;
 };
 
+struct Bullet {
+    int x, y;
+    int dirX, dirY;
+    int playerId;
+    float startTime;
+    bool active = true;
+};
+
 class RobbanPlanterar {
 private:
     std::vector<std::vector<Cell>> grid;
     std::map<int, Player> players;
     std::vector<Animal> animals;
+    std::vector<Bullet> bullets;
     int localPlayerId = 0;
     std::mt19937 rng;
     float gameTime = 0.0f;
@@ -152,7 +257,9 @@ private:
         
         // Validate sprite coordinates are within texture bounds  
         if (rect.x + rect.width > spriteSheet.width || rect.y + rect.height > spriteSheet.height) {
-            std::cout << "Warning: Sprite " << index << " coordinates out of bounds" << std::endl;
+            std::cout << "Warning: Sprite " << index << " coordinates (" << rect.x << "," << rect.y 
+                     << " " << rect.width << "x" << rect.height << ") out of bounds for texture " 
+                     << spriteSheet.width << "x" << spriteSheet.height << std::endl;
             return;
         }
         
@@ -168,6 +275,14 @@ private:
             static_cast<float>(CELL_SIZE),
             static_cast<float>(CELL_SIZE)
         };
+        
+        // Debug: print sprite draw info for first few draws
+        static int debugCount = 0;
+        if (debugCount < 5) {
+            std::cout << "Drawing sprite " << index << " from (" << rect.x << "," << rect.y 
+                     << ") size " << rect.width << "x" << rect.height << " to (" << x << "," << y << ")" << std::endl;
+            debugCount++;
+        }
         
         DrawTexturePro(spriteSheet, source, dest, {0, 0}, 0.0f, tint);
     }
@@ -221,8 +336,8 @@ private:
     void InitializeGrid() {
         grid.resize(GRID_HEIGHT, std::vector<Cell>(GRID_WIDTH));
         
-        // Add some initial shrubbery
-        for (int i = 0; i < 100; i++) {
+        // Add some initial shrubbery (reduced for smaller grid)
+        for (int i = 0; i < 60; i++) {  // Reduced from 100
             int x = rng() % GRID_WIDTH;
             int y = rng() % GRID_HEIGHT;
             if (grid[y][x].type == CellType::EMPTY) {
@@ -248,6 +363,91 @@ private:
         grid[player.y][player.x].type = CellType::EMPTY;
     }
 
+    void UpdateBullets() {
+        const float BULLET_SPEED = 8.0f; // cells per second
+        const float BULLET_LIFETIME = 2.0f; // seconds
+        
+        for (auto it = bullets.begin(); it != bullets.end();) {
+            Bullet& bullet = *it;
+            
+            // Remove old bullets
+            if (gameTime - bullet.startTime > BULLET_LIFETIME) {
+                it = bullets.erase(it);
+                continue;
+            }
+            
+            if (!bullet.active) {
+                it = bullets.erase(it);
+                continue;
+            }
+            
+            // Calculate how far the bullet should have traveled
+            float travelTime = gameTime - bullet.startTime;
+            float distance = travelTime * BULLET_SPEED;
+            
+            int newX = bullet.x + static_cast<int>(bullet.dirX * distance);
+            int newY = bullet.y + static_cast<int>(bullet.dirY * distance);
+            
+            // Check bounds
+            if (newX < 0 || newX >= GRID_WIDTH || newY < 0 || newY >= GRID_HEIGHT) {
+                it = bullets.erase(it);
+                continue;
+            }
+            
+            // Check for hits with animals
+            for (auto animalIt = animals.begin(); animalIt != animals.end(); ++animalIt) {
+                if (animalIt->x == newX && animalIt->y == newY) {
+                    // Hit animal
+                    if (players.find(bullet.playerId) != players.end()) {
+                        players[bullet.playerId].score += 5;
+                    }
+                    animals.erase(animalIt);
+                    bullet.active = false;
+                    break;
+                }
+            }
+            
+            if (!bullet.active) {
+                it = bullets.erase(it);
+                continue;
+            }
+            
+            // Check for hits with other players
+            for (auto& [id, otherPlayer] : players) {
+                if (id != bullet.playerId && otherPlayer.x == newX && otherPlayer.y == newY && otherPlayer.alive) {
+                    otherPlayer.alive = false;
+                    if (players.find(bullet.playerId) != players.end()) {
+                        players[bullet.playerId].score -= 5;
+                    }
+                    
+                    // Create grave
+                    grid[newY][newX].type = CellType::GRAVE;
+                    grid[newY][newX].playerId = id;
+                    
+                    // Respawn the killed player
+                    SpawnPlayer(id);
+                    bullet.active = false;
+                    break;
+                }
+            }
+            
+            if (!bullet.active) {
+                it = bullets.erase(it);
+                continue;
+            }
+            
+            // Check for obstacles (trees)
+            Cell& cell = grid[newY][newX];
+            if (cell.type == CellType::TREE_MATURE || cell.type == CellType::TREE_YOUNG) {
+                bullet.active = false;
+                it = bullets.erase(it);
+                continue;
+            }
+            
+            ++it;
+        }
+    }
+    
     void UpdateAnimals() {
         // Spawn new animals
         if (animals.size() < MAX_ANIMALS && (rng() % 1000) < (ANIMAL_SPAWN_RATE * 1000)) {
@@ -386,9 +586,7 @@ private:
             }
                 
             case PlayerMode::SHOOT: {
-                // Shoot in the direction the player last moved
-                int bulletX = player.x;
-                int bulletY = player.y;
+                // Fire a bullet in the direction the player last moved
                 int dirX = player.lastDirectionX;
                 int dirY = player.lastDirectionY;
                 
@@ -397,46 +595,17 @@ private:
                     dirX = 1;
                 }
                 
-                // Trace bullet path until it hits something or goes out of bounds
-                for (int range = 1; range <= 10; range++) {
-                    int checkX = bulletX + (dirX * range);
-                    int checkY = bulletY + (dirY * range);
-                    
-                    if (checkX < 0 || checkX >= GRID_WIDTH || checkY < 0 || checkY >= GRID_HEIGHT) {
-                        break; // Out of bounds
-                    }
-                    
-                    // Check for animals at this location
-                    for (auto it = animals.begin(); it != animals.end(); ++it) {
-                        if (it->x == checkX && it->y == checkY) {
-                            player.score += 5;
-                            animals.erase(it);
-                            return; // Bullet stops after hitting animal
-                        }
-                    }
-                    
-                    // Check for other players at this location
-                    for (auto& [id, otherPlayer] : players) {
-                        if (id != playerId && otherPlayer.x == checkX && otherPlayer.y == checkY && otherPlayer.alive) {
-                            otherPlayer.alive = false;
-                            player.score -= 5;
-                            
-                            // Create grave
-                            grid[checkY][checkX].type = CellType::GRAVE;
-                            grid[checkY][checkX].playerId = id;
-                            
-                            // Respawn the killed player
-                            SpawnPlayer(id);
-                            return; // Bullet stops after hitting player
-                        }
-                    }
-                    
-                    // Check for obstacles (trees)
-                    Cell& cell = grid[checkY][checkX];
-                    if (cell.type == CellType::TREE_MATURE || cell.type == CellType::TREE_YOUNG) {
-                        break; // Bullet stops at tree
-                    }
-                }
+                // Create bullet
+                Bullet bullet;
+                bullet.x = player.x;
+                bullet.y = player.y;
+                bullet.dirX = dirX;
+                bullet.dirY = dirY;
+                bullet.playerId = playerId;
+                bullet.startTime = gameTime;
+                bullet.active = true;
+                
+                bullets.push_back(bullet);
                 break;
             }
         }
@@ -458,8 +627,10 @@ private:
                 break;
                 
             case CellType::SHRUBBERY:
-                // Draw small vegetation as darker green patches
-                DrawRectangle(x * CELL_SIZE + 4, y * CELL_SIZE + 4, CELL_SIZE - 8, CELL_SIZE - 8, GREEN);
+                // Draw more detailed vegetation as multiple green patches
+                DrawRectangle(x * CELL_SIZE + 8, y * CELL_SIZE + 8, CELL_SIZE - 16, CELL_SIZE - 16, GREEN);
+                DrawRectangle(x * CELL_SIZE + 4, y * CELL_SIZE + 12, 8, 8, LIME);
+                DrawRectangle(x * CELL_SIZE + CELL_SIZE - 12, y * CELL_SIZE + 6, 6, 6, LIME);
                 break;
                 
             case CellType::TREE_SEEDLING:
@@ -468,9 +639,11 @@ private:
                     Color tint = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : WHITE;
                     DrawSprite(SPRITE_TREE_SMALL, x * CELL_SIZE, y * CELL_SIZE, tint);
                 } else {
-                    // Fallback: small colored square
+                    // Better fallback: small tree shape
                     Color treeColor = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : GREEN;
-                    DrawRectangle(x * CELL_SIZE + 8, y * CELL_SIZE + 8, 4, 4, treeColor);
+                    // Draw a small tree-like shape
+                    DrawRectangle(x * CELL_SIZE + 18, y * CELL_SIZE + 28, 4, 8, BROWN); // trunk
+                    DrawCircle(x * CELL_SIZE + 20, y * CELL_SIZE + 24, 8, treeColor);   // leaves
                 }
                 break;
                 
@@ -480,9 +653,11 @@ private:
                     Color tint = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : WHITE;
                     DrawSprite(SPRITE_TREE_SMALL, x * CELL_SIZE, y * CELL_SIZE, tint);
                 } else {
-                    // Fallback: medium colored square
+                    // Better fallback: medium tree shape
                     Color treeColor = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : GREEN;
-                    DrawRectangle(x * CELL_SIZE + 6, y * CELL_SIZE + 6, 8, 8, treeColor);
+                    // Draw a medium tree-like shape
+                    DrawRectangle(x * CELL_SIZE + 16, y * CELL_SIZE + 24, 8, 12, BROWN); // trunk
+                    DrawCircle(x * CELL_SIZE + 20, y * CELL_SIZE + 18, 12, treeColor);   // leaves
                 }
                 break;
                 
@@ -492,17 +667,23 @@ private:
                     Color tint = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : WHITE;
                     DrawSprite(SPRITE_TREE_LARGE, x * CELL_SIZE, y * CELL_SIZE, tint);
                 } else {
-                    // Fallback: large colored square
+                    // Better fallback: large tree shape
                     Color treeColor = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : GREEN;
-                    DrawRectangle(x * CELL_SIZE + 2, y * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4, treeColor);
+                    // Draw a large tree-like shape
+                    DrawRectangle(x * CELL_SIZE + 14, y * CELL_SIZE + 20, 12, 16, BROWN); // trunk
+                    DrawCircle(x * CELL_SIZE + 20, y * CELL_SIZE + 12, 16, treeColor);     // leaves
+                    DrawCircle(x * CELL_SIZE + 16, y * CELL_SIZE + 16, 10, treeColor);     // extra leaves
+                    DrawCircle(x * CELL_SIZE + 24, y * CELL_SIZE + 16, 10, treeColor);     // extra leaves
                 }
                 break;
             
             case CellType::GRAVE: {
-                // Draw a tombstone-like shape or colored square for grave
+                // Draw a more detailed tombstone-like shape (scaled up)
                 Color graveColor = (cell.playerId >= 0) ? PLAYER_COLORS[cell.playerId % 8] : GRAY;
-                DrawRectangle(x * CELL_SIZE + 6, y * CELL_SIZE + 4, 8, 12, graveColor);
-                DrawRectangle(x * CELL_SIZE + 4, y * CELL_SIZE + 10, 12, 6, graveColor);
+                DrawRectangle(x * CELL_SIZE + 12, y * CELL_SIZE + 8, 16, 24, graveColor);
+                DrawRectangle(x * CELL_SIZE + 8, y * CELL_SIZE + 20, 24, 12, graveColor);
+                // Add some detail
+                DrawRectangle(x * CELL_SIZE + 14, y * CELL_SIZE + 12, 12, 2, DARKGRAY);
                 break;
             }
             
@@ -586,6 +767,18 @@ private:
         }
     }
 
+    void DrawBullet(const Bullet& bullet) {
+        // Calculate current position
+        float travelTime = gameTime - bullet.startTime;
+        float distance = travelTime * 8.0f; // Same speed as UpdateBullets
+        
+        float currentX = bullet.x * CELL_SIZE + bullet.dirX * distance * CELL_SIZE;
+        float currentY = bullet.y * CELL_SIZE + bullet.dirY * distance * CELL_SIZE;
+        
+        // Draw bullet as a small yellow circle
+        DrawCircle(static_cast<int>(currentX + CELL_SIZE/2), static_cast<int>(currentY + CELL_SIZE/2), 3, YELLOW);
+    }
+
     void DrawAnimal(const Animal& animal) {
         // Draw grass background first
         Rectangle rect = {
@@ -603,7 +796,18 @@ private:
         } else {
             // Fallback: colored rectangle
             Color animalColor = (animal.type == AnimalType::RABBIT) ? WHITE : BROWN;
-            DrawRectangle(animal.x * CELL_SIZE + 4, animal.y * CELL_SIZE + 4, CELL_SIZE - 8, CELL_SIZE - 8, animalColor);
+            DrawRectangle(animal.x * CELL_SIZE + 8, animal.y * CELL_SIZE + 8, CELL_SIZE - 16, CELL_SIZE - 16, animalColor);
+            
+            // Add some simple detail for animals
+            if (animal.type == AnimalType::RABBIT) {
+                // Rabbit ears
+                DrawRectangle(animal.x * CELL_SIZE + 12, animal.y * CELL_SIZE + 4, 4, 8, WHITE);
+                DrawRectangle(animal.x * CELL_SIZE + 20, animal.y * CELL_SIZE + 4, 4, 8, WHITE);
+            } else {
+                // Deer antlers
+                DrawRectangle(animal.x * CELL_SIZE + 10, animal.y * CELL_SIZE + 4, 2, 6, BROWN);
+                DrawRectangle(animal.x * CELL_SIZE + 24, animal.y * CELL_SIZE + 4, 2, 6, BROWN);
+            }
         }
     }
 
@@ -712,6 +916,7 @@ public:
         
         UpdateAnimals();
         UpdateTrees();
+        UpdateBullets();
         //SyncGameState();
         
         // Process network messages
@@ -734,6 +939,11 @@ public:
         // Draw animals
         for (const auto& animal : animals) {
             DrawAnimal(animal);
+        }
+        
+        // Draw bullets
+        for (const auto& bullet : bullets) {
+            DrawBullet(bullet);
         }
         
         // Draw players
@@ -815,3 +1025,6 @@ int main() {
     CloseWindow();
     return 0;
 }
+
+
+#endif
