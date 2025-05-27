@@ -38,7 +38,7 @@ SpriteRect spriteRects[SPRITE_COUNT] = {
     // Let's start with very simple coordinates from the top-left
     // Using small squares that should definitely be safe
     [SPRITE_PLAYER_GUN]   = {   32,   480,  350,  320 },  // Top-left corner
-    [SPRITE_PLAYER_AXE]   = {  446,   480,  345,  322 },  // Next to it  
+    [SPRITE_PLAYER_AXE]   = {  446,   480,  342,  320 },  // Next to it  
     [SPRITE_PLAYER_PLANT] = { 780,   480,  336,  327 },  // Next to that
     [SPRITE_TREE_SMALL]   = { 100,   0,  210,  368 },  // Small tree
     [SPRITE_TREE_LARGE]   = { 380,   30,  280,  400 },  // Large tree

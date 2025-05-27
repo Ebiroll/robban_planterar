@@ -112,15 +112,19 @@ if(PLATFORM_WEB)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ASYNCIFY")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s GL_ENABLE_GET_PROC_ADDRESS=1")
     
+    # Embed robban.png for web builds
+    if(EXISTS "${CMAKE_SOURCE_DIR}/robban.png")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --preload-file ${CMAKE_SOURCE_DIR}/robban.png@robban.png")
+        message(STATUS "Embedding robban.png for web build")
+    else()
+        message(WARNING "robban.png not found - web build will use fallback graphics")
+    endif()
+    
     # Memory settings
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s INITIAL_MEMORY=67108864") # 64MB
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s INITIAL_MEMORY=67108864")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ALLOW_MEMORY_GROWTH=1")
     
-    # WebRTC/Networking settings for web
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s FETCH=1")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s WEBSOCKET_URL=wss://")
-    
-    # File system settings
+    # File system settings (needed for preloaded files)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s FORCE_FILESYSTEM=1")
     
     # Optimization settings
@@ -132,8 +136,10 @@ if(PLATFORM_WEB)
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -g")
     endif()
     
-    # Shell file customization
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/shell_minimal.html")
+    # Shell file customization (if exists)
+    if(EXISTS "${CMAKE_SOURCE_DIR}/shell_minimal.html")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/shell_minimal.html")
+    endif()
     
 elseif(WIN32)
     target_link_libraries(robban_planterar winmm)
@@ -180,6 +186,14 @@ endif()
 # Web-specific definitions
 if(PLATFORM_WEB)
     target_compile_definitions(robban_planterar PRIVATE PLATFORM_WEB)
+endif()
+
+# Add option for unit test mode
+option(UNIT_TEST "Build sprite unit test instead of game" OFF)
+
+if(UNIT_TEST)
+    target_compile_definitions(robban_planterar PRIVATE UNIT_TEST)
+    message(STATUS "Building in UNIT_TEST mode - sprite debugging")
 endif()
 
 # Install targets
