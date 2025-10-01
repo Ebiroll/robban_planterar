@@ -185,6 +185,27 @@ mergeInto(LibraryManager.library, {
         }
     },
 
+    // Send message to a specific peer
+    JS_SendMessageTo__deps: ['$PeerNetworkState'],
+    JS_SendMessageTo: function(peerIdPtr, messagePtr) {
+        var peerId = UTF8ToString(peerIdPtr);
+        var message = UTF8ToString(messagePtr);
+        console.log('[PeerNetwork] Sending message to ' + peerId + ':', message);
+
+        var messageObj = JSON.parse(message);
+
+        if (PeerNetworkState.connections.hasOwnProperty(peerId)) {
+            try {
+                PeerNetworkState.connections[peerId].send(messageObj);
+                console.log('[PeerNetwork] Sent to peer:', peerId);
+            } catch (e) {
+                console.error('[PeerNetwork] Error sending to', peerId, ':', e);
+            }
+        } else {
+            console.warn('[PeerNetwork] Could not send to peer, no connection:', peerId);
+        }
+    },
+
     // Get room ID
     JS_GetRoomId__deps: ['$PeerNetworkState'],
     JS_GetRoomId: function(buffer, bufferSize) {

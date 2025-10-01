@@ -252,6 +252,11 @@ private:
         networkManager = std::make_unique<NetworkManager>();
         
         // Set up network callbacks
+        networkManager->SetPlayerIdAssignedCallback([this](int playerId) {
+            this->localPlayerId = playerId;
+            std::cout << "Assigned player ID: " << playerId << std::endl;
+        });
+
         networkManager->SetPlayerJoinCallback([this](int playerId) {
             this->OnPlayerJoin(playerId);
         });
@@ -277,10 +282,10 @@ private:
         std::cout << "Player " << playerId << " joined the game" << std::endl;
         AddPlayer(playerId);
 
-        // If we're the host, send current game state to the new player
-        if (isHost && isMultiplayer) {
+        if (networkManager->IsHost()) {
             networkManager->SendGameState(gameState);
-            std::cout << "Sent game state to new player " << playerId << std::endl;
+            networkManager->AssignPlayerId(playerId);
+            std::cout << "Sent game state and assigned ID to new player " << playerId << std::endl;
         }
     }
     
@@ -873,22 +878,26 @@ public:
             if (IsKeyPressed(KEY_H)) {
                 // Host a game
                 currentRoom = "RobbanRoom";
-                if (networkManager->CreateRoom(currentRoom)) {
-                    isMultiplayer = true;
+                 isMultiplayer = true;
                     isHost = true;
-                    std::cout << "[Game] Hosting room: " << networkManager->GetRoomId() << std::endl;
-                } else {
+                if (!networkManager->CreateRoom(currentRoom)) {
+                     isMultiplayer = false;
+                    isHost = false;
                     std::cout << "[Game] Failed to create room!" << std::endl;
+                } else {
+                    std::cout << "[Game] Hosting room: " << networkManager->GetRoomId() << std::endl;
                 }
             } else if (IsKeyPressed(KEY_J)) {
                 // Join a game (simplified - in real version would show input dialog)
                 currentRoom = "RobbanRoom_1234"; // Example room ID
-                if (networkManager->JoinRoom(currentRoom)) {
-                    isMultiplayer = true;
+                isMultiplayer = true;
+                isHost = false;
+                if (!networkManager->JoinRoom(currentRoom)) {
+                     isMultiplayer = false;
                     isHost = false;
-                    std::cout << "[Game] Joining room: " << currentRoom << std::endl;
-                } else {
                     std::cout << "[Game] Failed to join room!" << std::endl;
+                } else {
+                    std::cout << "[Game] Joining room: " << currentRoom << std::endl;
                 }
             }
         } else {

@@ -14,6 +14,7 @@ extern "C" {
     int JS_CreateRoom();
     int JS_JoinRoom(const char* roomId);
     void JS_BroadcastMessage(const char* message);
+    void JS_SendMessageTo(const char* peerId, const char* message);
     int JS_GetRoomId(char* buffer, int bufferSize);
     int JS_GetConnectionCount();
     void JS_DisconnectPeer();
@@ -45,6 +46,10 @@ extern "C" {
     EMSCRIPTEN_KEEPALIVE
     void OnNetworkMessage(const char* message) {
         std::cout << "[C++] Network message received: " << message << std::endl;
+
+        if (g_networkManager->IsHost()) {
+            JS_BroadcastMessage(message);
+        }
 
         // Parse JSON message and update game state
         std::string msgStr(message);
@@ -133,10 +138,36 @@ extern "C" {
                 std::cout << "[C++] Player " << playerId << " changed mode to " << newMode << std::endl;
             } else if (type == "FULL_GAME_STATE") {
                 std::cout << "[C++] Full game state received" << std::endl;
+                std::cout << "[GAMESTATE] Deserializing game state" << std::endl;
                  if (g_networkManager) {
                     GameState state;
+                    std::string grid_str = extractValue("grid");
                     std::string players_str = extractValue("players");
-                    
+
+                    // Parse grid
+                    std::stringstream grid_ss(grid_str);
+                    std::string row_token;
+                    int y = 0;
+                    while(std::getline(grid_ss, row_token, '|')) {
+                        state.grid.resize(y + 1);
+                        std::stringstream cell_row_ss(row_token);
+                        std::string cell_token;
+                        int x = 0;
+                        while(std::getline(cell_row_ss, cell_token, ';')) {
+                           state.grid[y].resize(x + 1);
+                           std::stringstream cell_props_ss(cell_token);
+                           std::string prop;
+                           std::getline(cell_props_ss, prop, ',');
+                           state.grid[y][x].type = static_cast<CellType>(std::stoi(prop));
+                           std::getline(cell_props_ss, prop, ',');
+                           state.grid[y][x].playerId = std::stoi(prop);
+                           std::getline(cell_props_ss, prop, ',');
+                           state.grid[y][x].growth = std::stof(prop);
+                           x++;
+                        }
+                        y++;
+                    }
+
                      size_t current_pos = 0;
                      while(current_pos < players_str.length()) {
                         size_t start_obj = players_str.find('{', current_pos);
@@ -176,7 +207,12 @@ extern "C" {
                      }
                      g_networkManager->OnFullGameState(state);
                 }
-            } else {
+            } else if (type == "ASSIGN_PLAYER_ID") {
+                if (g_networkManager && g_networkManager->onPlayerIdAssigned) {
+                    g_networkManager->onPlayerIdAssigned(std::stoi(extractValue("playerId")));
+                }
+            }
+             else {
                 std::cout << "[C++] Unknown message type: " << type << std::endl;
             }
 
@@ -234,7 +270,26 @@ ActionMessage DeserializeAction(const std::string& data) {
 
 std::string SerializeGameState(const GameState& state) {
     std::ostringstream oss;
-    oss << "{\"type\":\"FULL_GAME_STATE\",\"players\":[";
+    oss << "{\"type\":\"FULL_GAME_STATE\",";
+    std::cout << "[GAMESTATE] Serializing game state" << std::endl;
+
+    // Serialize grid
+    oss << "\"grid\":\"";
+    for(size_t y = 0; y < state.grid.size(); ++y) {
+        for(size_t x = 0; x < state.grid[y].size(); ++x) {
+            const auto& cell = state.grid[y][x];
+            oss << static_cast<int>(cell.type) << "," << cell.playerId << "," << cell.growth;
+            if (x < state.grid[y].size() - 1) {
+                oss << ";";
+            }
+        }
+        if (y < state.grid.size() - 1) {
+            oss << "|";
+        }
+    }
+    oss << "\",";
+
+    oss << "\"players\":[";
     bool first = true;
     for (const auto& [id, player] : state.players) {
         if (!first) {
@@ -449,6 +504,23 @@ void NetworkManager::SendGameState(const GameState& state) {
 #endif
 }
 
+void NetworkManager::AssignPlayerId(int playerId) {
+    if (!isConnected || !isHost) return;
+
+#ifdef PLATFORM_WEB
+    std::ostringstream json;
+    json << "{\"type\":\"ASSIGN_PLAYER_ID\",\"playerId\":" << playerId << "}";
+    
+    // Find the peerId from the connectedPeers map
+    for (const auto& [pId, peerId] : connectedPeers) {
+        if (pId == playerId) {
+            JS_SendMessageTo(peerId.c_str(), json.str().c_str());
+            break;
+        }
+    }
+#endif
+}
+
 void NetworkManager::ProcessMessages() {
     std::lock_guard<std::mutex> lock(messageMutex);
     
@@ -602,7 +674,7 @@ bool WebRTCConnection::CreateAnswer(const std::string& /*offer*/, std::string& a
     // answer = answerSdp->ToString();
     
     // Simulate SDP answer
-    answer = "v=0\r\no=- 987654321 2 IN IP4 127.0.0.1\r\n"
+    answer = "v=0\r\not=- 987654321 2 IN IP4 127.0.0.1\r\n"
             "s=-\r\nt=0 0\r\na=group:BUNDLE 0\r\n"
             "m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n"
             "c=IN IP4 0.0.0.0\r\na=ice-ufrag:simulated\r\n"

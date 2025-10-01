@@ -10,6 +10,7 @@
 
 // Simple message types for game networking
 enum class MessageType {
+    ASSIGN_PLAYER_ID,
     PLAYER_JOIN,
     PLAYER_LEAVE,
     PLAYER_MOVE,
@@ -50,6 +51,9 @@ private:
     bool shouldStop = false;
     
     // Callbacks
+public:
+    std::function<void(int)> onPlayerIdAssigned;
+private:
     std::function<void(int)> onPlayerJoin;
     std::function<void(int)> onPlayerLeave;
     std::function<void(const Player&)> onPlayerUpdate;
@@ -79,11 +83,13 @@ public:
     void SendPlayerAction(const ActionMessage& action);
     void SendPlayerModeChange(int playerId, int newMode);
     void SendGameState(const GameState& state);
-    
+    void AssignPlayerId(int playerId);
+
     // Message processing
     void ProcessMessages();
     
     // Callbacks
+    void SetPlayerIdAssignedCallback(std::function<void(int)> callback) { onPlayerIdAssigned = callback; }
     void SetPlayerJoinCallback(std::function<void(int)> callback) { onPlayerJoin = callback; }
     void SetPlayerLeaveCallback(std::function<void(int)> callback) { onPlayerLeave = callback; }
     void SetPlayerUpdateCallback(std::function<void(const Player&)> callback) { onPlayerUpdate = callback; }
