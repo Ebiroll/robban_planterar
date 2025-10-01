@@ -39,6 +39,9 @@ mergeInto(LibraryManager.library, {
                 Module._OnPeerReady(idPtr);
                 Module._free(idPtr);
             }
+            if(window.updateRoomId) {
+                window.updateRoomId(id);
+            }
         });
 
         PeerNetworkState.peer.on('connection', function(conn) {
@@ -166,12 +169,15 @@ mergeInto(LibraryManager.library, {
     JS_BroadcastMessage__deps: ['$PeerNetworkState'],
     JS_BroadcastMessage: function(messagePtr) {
         var message = UTF8ToString(messagePtr);
+        console.log('[PeerNetwork] Broadcasting message:', message);
+
         var messageObj = JSON.parse(message);
 
         for (var peerId in PeerNetworkState.connections) {
             if (PeerNetworkState.connections.hasOwnProperty(peerId)) {
                 try {
                     PeerNetworkState.connections[peerId].send(messageObj);
+                    console.log('[PeerNetwork] Sent to peer:', peerId);
                 } catch (e) {
                     console.error('[PeerNetwork] Error sending to', peerId, ':', e);
                 }

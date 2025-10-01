@@ -41,7 +41,100 @@ extern "C" {
     
     EMSCRIPTEN_KEEPALIVE
     void OnNetworkMessage(const char* message) {
-        std::cout << "[C++] Network message: " << message << std::endl;
+        std::cout << "[C++] Network message received: " << message << std::endl;
+
+        // Parse JSON message and update game state
+        std::string msgStr(message);
+
+        // Simple JSON parsing for key-value pairs
+        auto extractValue = [&](const std::string& key) -> std::string {
+            std::string search = "\"" + key + "\":";
+            size_t pos = msgStr.find(search);
+            if (pos == std::string::npos) return "";
+
+            pos += search.length();
+            // Skip whitespace
+            while (pos < msgStr.length() && (msgStr[pos] == ' ' || msgStr[pos] == '\t')) pos++;
+
+            if (pos >= msgStr.length()) return "";
+
+            if (msgStr[pos] == '"') {
+                // String value
+                pos++; // Skip opening quote
+                size_t endPos = msgStr.find('"', pos);
+                if (endPos == std::string::npos) return "";
+                return msgStr.substr(pos, endPos - pos);
+            } else {
+                // Numeric or boolean value
+                size_t endPos = pos;
+                while (endPos < msgStr.length() && msgStr[endPos] != ',' && msgStr[endPos] != '}') endPos++;
+                return msgStr.substr(pos, endPos - pos);
+            }
+        };
+
+        try {
+            std::string type = extractValue("type");
+            std::cout << "[C++] Message type: " << type << std::endl;
+
+            if (type == "PLAYER_MOVE") {
+                PlayerUpdate update = {};
+
+                std::string idStr = extractValue("playerId");
+                std::string xStr = extractValue("x");
+                std::string yStr = extractValue("y");
+                std::string modeStr = extractValue("mode");
+                std::string scoreStr = extractValue("score");
+                std::string aliveStr = extractValue("alive");
+
+                if (!idStr.empty()) update.id = std::stoi(idStr);
+                if (!xStr.empty()) update.x = std::stoi(xStr);
+                if (!yStr.empty()) update.y = std::stoi(yStr);
+                if (!modeStr.empty()) update.mode = std::stoi(modeStr);
+                if (!scoreStr.empty()) update.score = std::stoi(scoreStr);
+                update.alive = (aliveStr == "true");
+
+                std::cout << "[C++] Player move: ID=" << update.id << " pos=(" << update.x << "," << update.y << ")" << std::endl;
+
+                // Update player if we have a valid network manager
+                if (g_networkManager) {
+                    g_networkManager->OnPlayerUpdate(update);
+                }
+
+            } else if (type == "PLAYER_ACTION") {
+                ActionMessage action = {};
+
+                std::string idStr = extractValue("playerId");
+                std::string xStr = extractValue("targetX");
+                std::string yStr = extractValue("targetY");
+                std::string actionStr = extractValue("actionType");
+
+                if (!idStr.empty()) action.playerId = std::stoi(idStr);
+                if (!xStr.empty()) action.targetX = std::stoi(xStr);
+                if (!yStr.empty()) action.targetY = std::stoi(yStr);
+                if (!actionStr.empty()) action.actionType = std::stoi(actionStr);
+
+                std::cout << "[C++] Player action: ID=" << action.playerId << " type=" << action.actionType << std::endl;
+
+                // Handle player action if we have a valid network manager
+                if (g_networkManager) {
+                    g_networkManager->OnPlayerAction(action);
+                }
+
+            } else if (type == "PLAYER_MODE_CHANGE") {
+                std::string idStr = extractValue("playerId");
+                std::string modeStr = extractValue("mode");
+
+                int playerId = idStr.empty() ? -1 : std::stoi(idStr);
+                int newMode = modeStr.empty() ? 0 : std::stoi(modeStr);
+
+                std::cout << "[C++] Player " << playerId << " changed mode to " << newMode << std::endl;
+            } else {
+                std::cout << "[C++] Unknown message type: " << type << std::endl;
+            }
+
+        } catch (const std::exception& e) {
+            std::cerr << "[C++] Error parsing network message: " << e.what() << " (message: " << message << ")" << std::endl;
+        }
     }
     
     // UI button callbacks

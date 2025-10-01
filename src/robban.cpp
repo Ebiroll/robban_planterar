@@ -222,8 +222,6 @@ private:
     std::mt19937 rng;
     float gameTime = 0.0f;
     int nextAnimalId = 0;
-    int nextPlayerId = 1;
-    
     // Sprite sheet
     Texture2D spriteSheet;
     bool spritesLoaded = false;
@@ -241,8 +239,6 @@ private:
     std::string currentRoom;
     
     // Game state synchronization
-    float lastSyncTime = 0.0f;
-    const float SYNC_INTERVAL = 0.1f; // Sync every 100ms
 
     // Sprite helper functions - MUST be defined before other functions that use them
     void LoadSprites() {
@@ -335,6 +331,27 @@ private:
     void OnPlayerJoin(int playerId) {
         std::cout << "Player " << playerId << " joined the game" << std::endl;
         AddPlayer(playerId);
+
+        // If we're the host, send current game state to the new player
+        if (isHost && isMultiplayer) {
+            // Send all current players' states
+            for (const auto& [id, player] : players) {
+                if (id != playerId) { // Don't send the new player's own state back
+                    PlayerUpdate update;
+                    update.id = player.id;
+                    update.x = player.x;
+                    update.y = player.y;
+                    update.mode = static_cast<int>(player.mode);
+                    update.score = player.score;
+                    update.alive = player.alive;
+
+                    networkManager->SendPlayerUpdate(update);
+                }
+            }
+
+            // Send current grid state (simplified - just send some key info)
+            std::cout << "Sent game state to new player " << playerId << std::endl;
+        }
     }
     
     void OnPlayerLeave(int playerId) {
@@ -344,6 +361,17 @@ private:
     
     void OnPlayerUpdate(const PlayerUpdate& update) {
         if (players.find(update.id) != players.end()) {
+            Player& player = players[update.id];
+            player.x = update.x;
+            player.y = update.y;
+            player.mode = static_cast<PlayerMode>(update.mode);
+            player.score = update.score;
+            player.alive = update.alive;
+            std::cout << "Updated player " << update.id << " position: (" << update.x << "," << update.y << ")" << std::endl;
+        } else {
+            // If player doesn't exist yet, add them
+            std::cout << "Adding new player " << update.id << " from network update" << std::endl;
+            AddPlayer(update.id);
             Player& player = players[update.id];
             player.x = update.x;
             player.y = update.y;
@@ -880,7 +908,7 @@ public:
 
     void Update() {
         gameTime = GetTime();
-        
+
         // Resume audio context on first user interaction (required for web browsers)
         #ifdef PLATFORM_WEB
         if (!audioResumed && soundsLoaded) {
@@ -894,8 +922,25 @@ public:
         #else
         audioResumed = true; // Native platforms don't need this
         #endif
-        
+
         Player& localPlayer = players[localPlayerId];
+
+        // Send periodic network updates (every 100ms)
+        static float lastNetworkUpdate = 0.0f;
+        if (gameTime - lastNetworkUpdate > 0.1f && isMultiplayer) {
+            // Send local player update
+            PlayerUpdate update;
+            update.id = localPlayer.id;
+            update.x = localPlayer.x;
+            update.y = localPlayer.y;
+            update.mode = static_cast<int>(localPlayer.mode);
+            update.score = localPlayer.score;
+            update.alive = localPlayer.alive;
+
+            std::cout << "[Game] Sending player update: ID=" << update.id << " pos=(" << update.x << "," << update.y << ")" << std::endl;
+            networkManager->SendPlayerUpdate(update);
+            lastNetworkUpdate = gameTime;
+        }
         
         // Network controls
         if (!isMultiplayer) {
@@ -905,7 +950,9 @@ public:
                 if (networkManager->CreateRoom(currentRoom)) {
                     isMultiplayer = true;
                     isHost = true;
-                    std::cout << "Hosting room: " << networkManager->GetRoomId() << std::endl;
+                    std::cout << "[Game] Hosting room: " << networkManager->GetRoomId() << std::endl;
+                } else {
+                    std::cout << "[Game] Failed to create room!" << std::endl;
                 }
             } else if (IsKeyPressed(KEY_J)) {
                 // Join a game (simplified - in real version would show input dialog)
@@ -913,8 +960,18 @@ public:
                 if (networkManager->JoinRoom(currentRoom)) {
                     isMultiplayer = true;
                     isHost = false;
-                    std::cout << "Joining room: " << currentRoom << std::endl;
+                    std::cout << "[Game] Joining room: " << currentRoom << std::endl;
+                } else {
+                    std::cout << "[Game] Failed to join room!" << std::endl;
                 }
+            }
+        } else {
+            // Debug: show multiplayer status
+            static float lastStatusLog = 0.0f;
+            if (gameTime - lastStatusLog > 2.0f) { // Log every 2 seconds
+                std::cout << "[Game] Multiplayer active - Host: " << (isHost ? "yes" : "no")
+                         << " Room: " << currentRoom << " Players: " << players.size() << std::endl;
+                lastStatusLog = gameTime;
             }
         }
         

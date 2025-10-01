@@ -62,6 +62,10 @@ private:
     
     void NetworkLoop();
     void ProcessIncomingMessage(const NetworkMessage& msg);
+
+public:
+    void OnPlayerUpdate(const PlayerUpdate& update) { if (onPlayerUpdate) onPlayerUpdate(update); }
+    void OnPlayerAction(const ActionMessage& action) { if (onPlayerAction) onPlayerAction(action); }
     
 public:
     NetworkManager();
