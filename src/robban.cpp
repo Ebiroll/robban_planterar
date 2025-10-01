@@ -228,6 +228,12 @@ private:
     Texture2D spriteSheet;
     bool spritesLoaded = false;
     
+    // Sound effects
+    Sound shootSound;
+    Sound axeSound;
+    bool soundsLoaded = false;
+    bool audioResumed = false;
+    
     // Networking
     std::unique_ptr<NetworkManager> networkManager;
     bool isMultiplayer = false;
@@ -247,6 +253,24 @@ private:
         } else {
             std::cout << "Warning: Could not load robban.png, using fallback graphics" << std::endl;
             spritesLoaded = false;
+        }
+    }
+    
+    void LoadSounds() {
+        // Initialize audio device
+        InitAudioDevice();
+        
+        // Load sound effects
+        shootSound = LoadSound("souds/shoot.wav");
+        axeSound = LoadSound("souds/axe-cut-1.wav");
+        
+        // Check if sounds loaded successfully
+        if (shootSound.frameCount > 0 && axeSound.frameCount > 0) {
+            soundsLoaded = true;
+            std::cout << "Sound effects loaded successfully" << std::endl;
+        } else {
+            soundsLoaded = false;
+            std::cout << "Warning: Could not load sound effects" << std::endl;
         }
     }
     
@@ -581,6 +605,11 @@ private:
                     cell.playerId = -1;
                     cell.growth = 0.0f;
                     player.score += 10;
+                    
+                    // Play axe sound effect
+                    if (soundsLoaded && audioResumed) {
+                        PlaySound(axeSound);
+                    }
                 }
                 break;
             }
@@ -606,6 +635,11 @@ private:
                 bullet.active = true;
                 
                 bullets.push_back(bullet);
+                
+                // Play shoot sound effect
+                if (soundsLoaded && audioResumed) {
+                    PlaySound(shootSound);
+                }
                 break;
             }
         }
@@ -819,6 +853,7 @@ public:
         InitializeGrid();
         SetupNetworking();
         LoadSprites();
+        LoadSounds();
         
         // Add local player
         Player localPlayer;
@@ -833,10 +868,32 @@ public:
             UnloadTexture(spriteSheet);
             spritesLoaded = false;
         }
+        
+        if (soundsLoaded) {
+            UnloadSound(shootSound);
+            UnloadSound(axeSound);
+            soundsLoaded = false;
+        }
+        
+        CloseAudioDevice();
     }
 
     void Update() {
         gameTime = GetTime();
+        
+        // Resume audio context on first user interaction (required for web browsers)
+        #ifdef PLATFORM_WEB
+        if (!audioResumed && soundsLoaded) {
+            // Check if any key is pressed
+            if (GetKeyPressed() != 0 || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                // Resume audio context for web
+                audioResumed = true;
+                std::cout << "Audio context resumed after user interaction" << std::endl;
+            }
+        }
+        #else
+        audioResumed = true; // Native platforms don't need this
+        #endif
         
         Player& localPlayer = players[localPlayerId];
         
@@ -970,6 +1027,13 @@ public:
         } else {
             DrawText(TextFormat("Using sprites: %dx%d", spriteSheet.width, spriteSheet.height), 10, 80, 14, GREEN);
         }
+        
+        // Show audio status
+        #ifdef PLATFORM_WEB
+        if (soundsLoaded && !audioResumed) {
+            DrawText("Press any key to enable audio", 10, 100, 16, YELLOW);
+        }
+        #endif
         
         // Show shooting direction
         int uiOffset = spritesLoaded ? 80 : 100;
