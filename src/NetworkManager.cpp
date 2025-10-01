@@ -47,7 +47,8 @@ extern "C" {
     void OnNetworkMessage(const char* message) {
         std::cout << "[C++] Network message received: " << message << std::endl;
 
-        if (g_networkManager->IsHost()) {
+        if (g_networkManager && g_networkManager->IsHost()) {
+            std::cout << "[C++] Host rebroadcasting message to all clients" << std::endl;
             JS_BroadcastMessage(message);
         }
 
@@ -432,6 +433,7 @@ void NetworkManager::SendPlayerUpdate(const Player& update) {
          << ",\"mode\":" << static_cast<int>(update.mode) << ",\"score\":" << update.score
          << ",\"alive\":" << (update.alive ? "true" : "false") << "}";
     
+    std::cout << "[C++] Sending player update for player " << update.id << " at (" << update.x << "," << update.y << ")" << std::endl;
     JS_BroadcastMessage(json.str().c_str());
     #else
     NetworkMessage msg;
@@ -458,6 +460,7 @@ void NetworkManager::SendPlayerAction(const ActionMessage& action) {
          << ",\"targetX\":" << action.targetX << ",\"targetY\":" << action.targetY
          << ",\"actionType\":" << action.actionType << "}";
     
+    std::cout << "[C++] Sending player action from player " << action.playerId << " type " << action.actionType << std::endl;
     JS_BroadcastMessage(json.str().c_str());
     #else
     NetworkMessage msg;

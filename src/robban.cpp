@@ -255,6 +255,15 @@ private:
         networkManager->SetPlayerIdAssignedCallback([this](int playerId) {
             this->localPlayerId = playerId;
             std::cout << "Assigned player ID: " << playerId << std::endl;
+            
+            // Create the player if it doesn't exist yet
+            if (gameState.players.find(playerId) == gameState.players.end()) {
+                Player localPlayer;
+                localPlayer.id = playerId;
+                localPlayer.color = PLAYER_COLORS[playerId % 8];
+                gameState.players[playerId] = localPlayer;
+                SpawnPlayer(playerId);
+            }
         });
 
         networkManager->SetPlayerJoinCallback([this](int playerId) {
@@ -823,12 +832,11 @@ public:
         LoadSprites();
         LoadSounds();
         
-        // Add local player
-        Player localPlayer;
-        localPlayer.id = localPlayerId;
-        localPlayer.color = PLAYER_COLORS[localPlayerId % 8];
-        gameState.players[localPlayerId] = localPlayer;
-        SpawnPlayer(localPlayerId);
+        // Don't create a player yet - wait for network initialization
+        // The player will be created when:
+        // 1. The user hosts a game (they become player 0)
+        // 2. The user joins a game and receives their player ID from the server
+        // 3. The game is played in single-player mode
     }
     
     ~RobbanPlanterar() {
@@ -878,10 +886,20 @@ public:
             if (IsKeyPressed(KEY_H)) {
                 // Host a game
                 currentRoom = "RobbanRoom";
-                 isMultiplayer = true;
-                    isHost = true;
+                isMultiplayer = true;
+                isHost = true;
+                
+                // Create the host player (player 0) if not already created
+                if (gameState.players.find(localPlayerId) == gameState.players.end()) {
+                    Player localPlayer;
+                    localPlayer.id = localPlayerId;
+                    localPlayer.color = PLAYER_COLORS[localPlayerId % 8];
+                    gameState.players[localPlayerId] = localPlayer;
+                    SpawnPlayer(localPlayerId);
+                }
+                
                 if (!networkManager->CreateRoom(currentRoom)) {
-                     isMultiplayer = false;
+                    isMultiplayer = false;
                     isHost = false;
                     std::cout << "[Game] Failed to create room!" << std::endl;
                 } else {
