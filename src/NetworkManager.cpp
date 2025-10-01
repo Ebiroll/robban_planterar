@@ -5,6 +5,72 @@
 #include <chrono>
 #include <algorithm>
 
+#ifdef PLATFORM_WEB
+#include <emscripten.h>
+
+// JavaScript bridge functions
+extern "C" {
+    int JS_InitPeerNetwork();
+    int JS_CreateRoom();
+    int JS_JoinRoom(const char* roomId);
+    void JS_BroadcastMessage(const char* message);
+    int JS_GetRoomId(char* buffer, int bufferSize);
+    int JS_GetConnectionCount();
+    void JS_DisconnectPeer();
+}
+
+// Global network manager pointer for callbacks
+static NetworkManager* g_networkManager = nullptr;
+
+// Callbacks from JavaScript to C++
+extern "C" {
+    EMSCRIPTEN_KEEPALIVE
+    void OnPeerReady(const char* peerId) {
+        std::cout << "[C++] Peer ready with ID: " << peerId << std::endl;
+    }
+    
+    EMSCRIPTEN_KEEPALIVE
+    void OnPlayerJoined(const char* peerId) {
+        std::cout << "[C++] Player joined: " << peerId << std::endl;
+    }
+    
+    EMSCRIPTEN_KEEPALIVE
+    void OnPlayerLeft(const char* peerId) {
+        std::cout << "[C++] Player left: " << peerId << std::endl;
+    }
+    
+    EMSCRIPTEN_KEEPALIVE
+    void OnNetworkMessage(const char* message) {
+        std::cout << "[C++] Network message: " << message << std::endl;
+    }
+    
+    // UI button callbacks
+    EMSCRIPTEN_KEEPALIVE
+    void OnHostGameClicked() {
+        std::cout << "[C++] Host game button clicked" << std::endl;
+        if (g_networkManager) {
+            g_networkManager->CreateRoom("RobbanRoom");
+        }
+    }
+    
+    EMSCRIPTEN_KEEPALIVE
+    void OnJoinGameClicked(const char* roomId) {
+        std::cout << "[C++] Join game button clicked with room: " << roomId << std::endl;
+        if (g_networkManager) {
+            g_networkManager->JoinRoom(roomId);
+        }
+    }
+    
+    EMSCRIPTEN_KEEPALIVE
+    void OnDisconnectClicked() {
+        std::cout << "[C++] Disconnect button clicked" << std::endl;
+        if (g_networkManager) {
+            g_networkManager->Disconnect();
+        }
+    }
+}
+#endif
+
 // JSON-like serialization helpers
 std::string SerializePlayerUpdate(const PlayerUpdate& update) {
     std::ostringstream oss;
@@ -52,6 +118,18 @@ NetworkManager::NetworkManager() {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(1000, 9999);
+    
+    #ifdef PLATFORM_WEB
+    // Set global pointer for callbacks
+    g_networkManager = this;
+    
+    // Initialize PeerJS networking on web
+    if (JS_InitPeerNetwork()) {
+        std::cout << "PeerJS networking initialized" << std::endl;
+    } else {
+        std::cerr << "Failed to initialize PeerJS networking" << std::endl;
+    }
+    #endif
 }
 
 NetworkManager::~NetworkManager() {
@@ -59,7 +137,24 @@ NetworkManager::~NetworkManager() {
 }
 
 bool NetworkManager::CreateRoom(const std::string& roomName) {
-    // Generate a unique room ID
+    #ifdef PLATFORM_WEB
+    // On web, PeerJS auto-generates room ID
+    if (JS_CreateRoom()) {
+        isHost = true;
+        isConnected = true;
+        
+        // Get the generated room ID from JS
+        char buffer[256];
+        if (JS_GetRoomId(buffer, sizeof(buffer))) {
+            roomId = std::string(buffer);
+            std::cout << "Created room with ID: " << roomId << std::endl;
+            std::cout << "Share this ID with others to join!" << std::endl;
+            return true;
+        }
+    }
+    return false;
+    #else
+    // Native build - use threads
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(1000, 9999);
@@ -68,39 +163,50 @@ bool NetworkManager::CreateRoom(const std::string& roomName) {
     isHost = true;
     isConnected = true;
     
-    // Start network thread
     shouldStop = false;
     networkThread = std::thread(&NetworkManager::NetworkLoop, this);
     
     std::cout << "Created room: " << roomId << std::endl;
     return true;
+    #endif
 }
 
 bool NetworkManager::JoinRoom(const std::string& targetRoomId) {
+    #ifdef PLATFORM_WEB
+    // On web, use PeerJS to connect
+    if (JS_JoinRoom(targetRoomId.c_str())) {
+        roomId = targetRoomId;
+        isHost = false;
+        isConnected = true;
+        std::cout << "Joining room: " << roomId << std::endl;
+        return true;
+    }
+    return false;
+    #else
+    // Native build
     roomId = targetRoomId;
     isHost = false;
-    
-    // In a real implementation, this would connect to a signaling server
-    // and establish WebRTC connections with other peers
-    
-    // For demo purposes, simulate connection
     isConnected = true;
     
-    // Start network thread
     shouldStop = false;
     networkThread = std::thread(&NetworkManager::NetworkLoop, this);
     
     std::cout << "Joined room: " << roomId << std::endl;
     return true;
+    #endif
 }
 
 void NetworkManager::Disconnect() {
     if (isConnected) {
+        #ifdef PLATFORM_WEB
+        JS_DisconnectPeer();
+        #else
         shouldStop = true;
         
         if (networkThread.joinable()) {
             networkThread.join();
         }
+        #endif
         
         isConnected = false;
         isHost = false;
@@ -117,6 +223,16 @@ void NetworkManager::Disconnect() {
 void NetworkManager::SendPlayerUpdate(const PlayerUpdate& update) {
     if (!isConnected) return;
     
+    #ifdef PLATFORM_WEB
+    // Build JSON message for JavaScript
+    std::ostringstream json;
+    json << "{\"type\":\"PLAYER_MOVE\",\"playerId\":" << update.id
+         << ",\"x\":" << update.x << ",\"y\":" << update.y
+         << ",\"mode\":" << update.mode << ",\"score\":" << update.score
+         << ",\"alive\":" << (update.alive ? "true" : "false") << "}";
+    
+    JS_BroadcastMessage(json.str().c_str());
+    #else
     NetworkMessage msg;
     msg.type = MessageType::PLAYER_MOVE;
     msg.playerId = update.id;
@@ -125,11 +241,21 @@ void NetworkManager::SendPlayerUpdate(const PlayerUpdate& update) {
     
     std::lock_guard<std::mutex> lock(messageMutex);
     outgoingMessages.push(msg);
+    #endif
 }
 
 void NetworkManager::SendPlayerAction(const ActionMessage& action) {
     if (!isConnected) return;
     
+    #ifdef PLATFORM_WEB
+    // Build JSON message for JavaScript
+    std::ostringstream json;
+    json << "{\"type\":\"PLAYER_ACTION\",\"playerId\":" << action.playerId
+         << ",\"targetX\":" << action.targetX << ",\"targetY\":" << action.targetY
+         << ",\"actionType\":" << action.actionType << "}";
+    
+    JS_BroadcastMessage(json.str().c_str());
+    #else
     NetworkMessage msg;
     msg.type = MessageType::PLAYER_ACTION;
     msg.playerId = action.playerId;
@@ -138,11 +264,20 @@ void NetworkManager::SendPlayerAction(const ActionMessage& action) {
     
     std::lock_guard<std::mutex> lock(messageMutex);
     outgoingMessages.push(msg);
+    #endif
 }
 
 void NetworkManager::SendPlayerModeChange(int playerId, int newMode) {
     if (!isConnected) return;
     
+    #ifdef PLATFORM_WEB
+    // Build JSON message for JavaScript
+    std::ostringstream json;
+    json << "{\"type\":\"PLAYER_MODE_CHANGE\",\"playerId\":" << playerId
+         << ",\"mode\":" << newMode << "}";
+    
+    JS_BroadcastMessage(json.str().c_str());
+    #else
     NetworkMessage msg;
     msg.type = MessageType::PLAYER_MODE_CHANGE;
     msg.playerId = playerId;
@@ -151,6 +286,7 @@ void NetworkManager::SendPlayerModeChange(int playerId, int newMode) {
     
     std::lock_guard<std::mutex> lock(messageMutex);
     outgoingMessages.push(msg);
+    #endif
 }
 
 void NetworkManager::ProcessMessages() {

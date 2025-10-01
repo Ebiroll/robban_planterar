@@ -112,9 +112,12 @@ if(PLATFORM_WEB)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ASYNCIFY")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s GL_ENABLE_GET_PROC_ADDRESS=1")
     
-    # Export runtime methods needed for audio (including heap arrays for Web Audio API)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','getValue','setValue','HEAPF32','HEAPU8','HEAP16','HEAPU16','HEAP32','HEAPU32']")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_FUNCTIONS=['_main','_malloc','_free']")
+    # Export runtime methods needed for audio and networking (including heap arrays for Web Audio API)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','getValue','setValue','HEAPF32','HEAPU8','HEAP16','HEAPU16','HEAP32','HEAPU32','allocateUTF8','UTF8ToString']")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_FUNCTIONS=['_main','_malloc','_free','_OnPeerReady','_OnPlayerJoined','_OnPlayerLeft','_OnNetworkMessage','_OnHostGameClicked','_OnJoinGameClicked','_OnDisconnectClicked','_JS_InitPeerNetwork','_JS_CreateRoom','_JS_JoinRoom','_JS_BroadcastMessage','_JS_GetRoomId','_JS_GetConnectionCount','_JS_DisconnectPeer']")
+
+    # Include JavaScript library for PeerJS networking
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --js-library ${CMAKE_SOURCE_DIR}/peer_network.js")
     
     # Embed robban.png for web builds
     if(EXISTS "${CMAKE_SOURCE_DIR}/robban.png")
@@ -155,9 +158,13 @@ if(PLATFORM_WEB)
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -g")
     endif()
     
-    # Shell file customization (if exists)
-    if(EXISTS "${CMAKE_SOURCE_DIR}/shell_minimal.html")
+    # Shell file customization - use multiplayer shell
+    if(EXISTS "${CMAKE_SOURCE_DIR}/shell_multiplayer.html")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/shell_multiplayer.html")
+        message(STATUS "Using multiplayer HTML shell")
+    elseif(EXISTS "${CMAKE_SOURCE_DIR}/shell_minimal.html")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --shell-file ${CMAKE_SOURCE_DIR}/shell_minimal.html")
+        message(STATUS "Using minimal HTML shell")
     endif()
     
 elseif(WIN32)
