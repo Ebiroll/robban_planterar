@@ -1,17 +1,14 @@
 // PeerJS WebRTC Networking for Robban Planterar
 // This bridges between Emscripten/WASM and PeerJS for multiplayer
 
-// Define PeerNetworkState as a global variable
-var PeerNetworkState = {
-    peer: null,
-    connections: {},
-    roomId: null,
-    isHost: false
-};
-
 // Emscripten library integration
 mergeInto(LibraryManager.library, {
+    // Define PeerNetworkState in library scope
+    $PeerNetworkState__postset: 'PeerNetworkState = { peer: null, connections: {}, roomId: null, isHost: false };',
+    $PeerNetworkState: {},
+
     // Initialize PeerJS networking
+    JS_InitPeerNetwork__deps: ['$PeerNetworkState'],
     JS_InitPeerNetwork: function() {
         console.log('[PeerNetwork] JS_InitPeerNetwork called');
 
@@ -97,14 +94,17 @@ mergeInto(LibraryManager.library, {
     },
 
     // Create room (host)
+    JS_CreateRoom__deps: ['$PeerNetworkState'],
     JS_CreateRoom: function() {
         console.log('[PeerNetwork] JS_CreateRoom called');
+        PeerNetworkState.isHost = true;
         // Room is automatically created when peer initializes
         // Just return success
         return 1;
     },
 
     // Join room
+    JS_JoinRoom__deps: ['$PeerNetworkState'],
     JS_JoinRoom: function(roomIdPtr) {
         var roomId = UTF8ToString(roomIdPtr);
         console.log('[PeerNetwork] Connecting to:', roomId);
@@ -163,6 +163,7 @@ mergeInto(LibraryManager.library, {
     },
 
     // Send message to all peers
+    JS_BroadcastMessage__deps: ['$PeerNetworkState'],
     JS_BroadcastMessage: function(messagePtr) {
         var message = UTF8ToString(messagePtr);
         var messageObj = JSON.parse(message);
@@ -179,6 +180,7 @@ mergeInto(LibraryManager.library, {
     },
 
     // Get room ID
+    JS_GetRoomId__deps: ['$PeerNetworkState'],
     JS_GetRoomId: function(buffer, bufferSize) {
         var roomId = PeerNetworkState.roomId;
         if (roomId) {
@@ -189,11 +191,13 @@ mergeInto(LibraryManager.library, {
     },
 
     // Get connection count
+    JS_GetConnectionCount__deps: ['$PeerNetworkState'],
     JS_GetConnectionCount: function() {
         return Object.keys(PeerNetworkState.connections).length;
     },
 
     // Disconnect
+    JS_DisconnectPeer__deps: ['$PeerNetworkState'],
     JS_DisconnectPeer: function() {
         for (var peerId in PeerNetworkState.connections) {
             if (PeerNetworkState.connections.hasOwnProperty(peerId)) {
@@ -211,5 +215,5 @@ mergeInto(LibraryManager.library, {
 
 // Also expose to window for HTML access
 if (typeof window !== 'undefined') {
-    window.PeerNetwork = PeerNetworkState;
+    window.PeerNetwork = LibraryManager.library.PeerNetworkState;
 }
