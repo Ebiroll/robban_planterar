@@ -250,15 +250,15 @@ private:
         }
     }
     
-    void DrawSprite(SpriteIndex index, int x, int y, Color tint = WHITE) {
+    void DrawSprite(SpriteIndex index, int x, int y, Color tint = WHITE, bool flipX = false) {
         if (!spritesLoaded || spriteSheet.id == 0) return;
         
         SpriteRect rect = spriteRects[index];
         
-        // Validate sprite coordinates are within texture bounds  
+        // Validate sprite coordinates are within texture bounds
         if (rect.x + rect.width > spriteSheet.width || rect.y + rect.height > spriteSheet.height) {
-            std::cout << "Warning: Sprite " << index << " coordinates (" << rect.x << "," << rect.y 
-                     << " " << rect.width << "x" << rect.height << ") out of bounds for texture " 
+            std::cout << "Warning: Sprite " << index << " coordinates (" << rect.x << "," << rect.y
+                     << " " << rect.width << "x" << rect.height << ") out of bounds for texture "
                      << spriteSheet.width << "x" << spriteSheet.height << std::endl;
             return;
         }
@@ -266,7 +266,7 @@ private:
         Rectangle source = {
             static_cast<float>(rect.x),
             static_cast<float>(rect.y),
-            static_cast<float>(rect.width),
+            static_cast<float>(rect.width) * (flipX ? -1.0f : 1.0f),  // Negative width flips horizontally
             static_cast<float>(rect.height)
         };
         Rectangle dest = {
@@ -279,7 +279,7 @@ private:
         // Debug: print sprite draw info for first few draws
         static int debugCount = 0;
         if (debugCount < 5) {
-            std::cout << "Drawing sprite " << index << " from (" << rect.x << "," << rect.y 
+            std::cout << "Drawing sprite " << index << " from (" << rect.x << "," << rect.y
                      << ") size " << rect.width << "x" << rect.height << " to (" << x << "," << y << ")" << std::endl;
             debugCount++;
         }
@@ -699,9 +699,9 @@ private:
         
         // Draw grass background first
         Rectangle rect = {
-            static_cast<float>(player.x * CELL_SIZE), 
-            static_cast<float>(player.y * CELL_SIZE), 
-            static_cast<float>(CELL_SIZE), 
+            static_cast<float>(player.x * CELL_SIZE),
+            static_cast<float>(player.y * CELL_SIZE),
+            static_cast<float>(CELL_SIZE),
             static_cast<float>(CELL_SIZE)
         };
         DrawRectangleRec(rect, DARKGREEN);
@@ -721,8 +721,11 @@ private:
                     break;
             }
             
-            // Draw player sprite with color tint
-            DrawSprite(spriteIndex, player.x * CELL_SIZE, player.y * CELL_SIZE, player.color);
+            // Flip sprite horizontally when moving left (lastDirectionX < 0)
+            bool flipX = (player.lastDirectionX < 0);
+            
+            // Draw player sprite with color tint and flip if moving left
+            DrawSprite(spriteIndex, player.x * CELL_SIZE, player.y * CELL_SIZE, player.color, flipX);
         } else {
             // Fallback: colored rectangle with mode indicator
             DrawRectangleRec(rect, player.color);
