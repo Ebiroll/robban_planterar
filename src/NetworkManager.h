@@ -1,4 +1,5 @@
 #pragma once
+#include "GameState.h"
 #include <string>
 #include <vector>
 #include <functional>
@@ -16,7 +17,9 @@ enum class MessageType {
     PLAYER_MODE_CHANGE,
     GAME_STATE_UPDATE,
     ANIMAL_UPDATE,
-    TREE_UPDATE
+    TREE_UPDATE,
+    FULL_GAME_STATE,
+    GAME_STATE_CHUNK
 };
 
 struct NetworkMessage {
@@ -24,14 +27,6 @@ struct NetworkMessage {
     int playerId;
     std::string data;
     float timestamp;
-};
-
-struct PlayerUpdate {
-    int id;
-    int x, y;
-    int mode;
-    int score;
-    bool alive;
 };
 
 struct ActionMessage {
@@ -57,15 +52,18 @@ private:
     // Callbacks
     std::function<void(int)> onPlayerJoin;
     std::function<void(int)> onPlayerLeave;
-    std::function<void(const PlayerUpdate&)> onPlayerUpdate;
+    std::function<void(const Player&)> onPlayerUpdate;
     std::function<void(const ActionMessage&)> onPlayerAction;
+    std::function<void(const GameState&)> onFullGameState;
     
     void NetworkLoop();
     void ProcessIncomingMessage(const NetworkMessage& msg);
 
 public:
-    void OnPlayerUpdate(const PlayerUpdate& update) { if (onPlayerUpdate) onPlayerUpdate(update); }
+    void OnPlayerUpdate(const Player& update) { if (onPlayerUpdate) onPlayerUpdate(update); }
     void OnPlayerAction(const ActionMessage& action) { if (onPlayerAction) onPlayerAction(action); }
+    void OnFullGameState(const GameState& state) { if (onFullGameState) onFullGameState(state); }
+    void HandlePlayerJoined(const std::string& peerId);
     
 public:
     NetworkManager();
@@ -77,9 +75,10 @@ public:
     void Disconnect();
     
     // Message sending
-    void SendPlayerUpdate(const PlayerUpdate& update);
+    void SendPlayerUpdate(const Player& update);
     void SendPlayerAction(const ActionMessage& action);
     void SendPlayerModeChange(int playerId, int newMode);
+    void SendGameState(const GameState& state);
     
     // Message processing
     void ProcessMessages();
@@ -87,8 +86,9 @@ public:
     // Callbacks
     void SetPlayerJoinCallback(std::function<void(int)> callback) { onPlayerJoin = callback; }
     void SetPlayerLeaveCallback(std::function<void(int)> callback) { onPlayerLeave = callback; }
-    void SetPlayerUpdateCallback(std::function<void(const PlayerUpdate&)> callback) { onPlayerUpdate = callback; }
+    void SetPlayerUpdateCallback(std::function<void(const Player&)> callback) { onPlayerUpdate = callback; }
     void SetPlayerActionCallback(std::function<void(const ActionMessage&)> callback) { onPlayerAction = callback; }
+    void SetFullGameStateCallback(std::function<void(const GameState&)> callback) { onFullGameState = callback; }
     
     // Status
     bool IsConnected() const { return isConnected; }

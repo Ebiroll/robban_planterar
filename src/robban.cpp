@@ -1,5 +1,6 @@
 #include "raylib.h"
 #include "NetworkManager.h"
+#include "GameState.h"
 #include <vector>
 #include <map>
 #include <random>
@@ -154,70 +155,10 @@ const Color PLAYER_COLORS[] = {
     BLUE, RED, GREEN, YELLOW, PURPLE, ORANGE, PINK, BROWN
 };
 
-enum class CellType {
-    EMPTY,
-    SHRUBBERY,
-    TREE_SEEDLING,
-    TREE_YOUNG,
-    TREE_MATURE,
-    GRAVE,
-    PLAYER,
-    ANIMAL
-};
-
-enum class PlayerMode {
-    PLANT,
-    SHOOT,
-    CHOP
-};
-
-enum class AnimalType {
-    RABBIT,
-    DEER
-};
-
-struct Cell {
-    CellType type = CellType::EMPTY;
-    int playerId = -1;
-    float growth = 0.0f;
-    float lastUpdate = 0.0f;
-};
-
-struct Player {
-    int id;
-    int x, y;
-    PlayerMode mode = PlayerMode::PLANT;
-    Color color;
-    int score = 0;
-    bool alive = true;
-    float lastAction = 0.0f;
-    int lastDirectionX = 0; // For shooting direction
-    int lastDirectionY = 0;
-    float lastMove = 0.0f;  // For movement throttling
-};
-
-struct Animal {
-    AnimalType type;
-    int x, y;
-    float lastMove = 0.0f;
-    float moveDelay = 1.0f;
-    int id;
-};
-
-struct Bullet {
-    int x, y;
-    int dirX, dirY;
-    int playerId;
-    float startTime;
-    bool active = true;
-};
 
 class RobbanPlanterar {
 private:
-    std::vector<std::vector<Cell>> grid;
-    std::map<int, Player> players;
-    std::vector<Animal> animals;
-    std::vector<Bullet> bullets;
+    GameState gameState;
     int localPlayerId = 0;
     std::mt19937 rng;
     float gameTime = 0.0f;
@@ -319,8 +260,12 @@ private:
             this->OnPlayerLeave(playerId);
         });
         
-        networkManager->SetPlayerUpdateCallback([this](const PlayerUpdate& update) {
+        networkManager->SetPlayerUpdateCallback([this](const Player& update) {
             this->OnPlayerUpdate(update);
+        });
+        
+        networkManager->SetFullGameStateCallback([this](const GameState& state) {
+            this->OnFullGameState(state);
         });
         
         networkManager->SetPlayerActionCallback([this](const ActionMessage& action) {
@@ -334,22 +279,7 @@ private:
 
         // If we're the host, send current game state to the new player
         if (isHost && isMultiplayer) {
-            // Send all current players' states
-            for (const auto& [id, player] : players) {
-                if (id != playerId) { // Don't send the new player's own state back
-                    PlayerUpdate update;
-                    update.id = player.id;
-                    update.x = player.x;
-                    update.y = player.y;
-                    update.mode = static_cast<int>(player.mode);
-                    update.score = player.score;
-                    update.alive = player.alive;
-
-                    networkManager->SendPlayerUpdate(update);
-                }
-            }
-
-            // Send current grid state (simplified - just send some key info)
+            networkManager->SendGameState(gameState);
             std::cout << "Sent game state to new player " << playerId << std::endl;
         }
     }
@@ -359,12 +289,12 @@ private:
         RemovePlayer(playerId);
     }
     
-    void OnPlayerUpdate(const PlayerUpdate& update) {
-        if (players.find(update.id) != players.end()) {
-            Player& player = players[update.id];
+    void OnPlayerUpdate(const Player& update) {
+        if (gameState.players.find(update.id) != gameState.players.end()) {
+            Player& player = gameState.players[update.id];
             player.x = update.x;
             player.y = update.y;
-            player.mode = static_cast<PlayerMode>(update.mode);
+            player.mode = update.mode;
             player.score = update.score;
             player.alive = update.alive;
             std::cout << "Updated player " << update.id << " position: (" << update.x << "," << update.y << ")" << std::endl;
@@ -372,10 +302,10 @@ private:
             // If player doesn't exist yet, add them
             std::cout << "Adding new player " << update.id << " from network update" << std::endl;
             AddPlayer(update.id);
-            Player& player = players[update.id];
+            Player& player = gameState.players[update.id];
             player.x = update.x;
             player.y = update.y;
-            player.mode = static_cast<PlayerMode>(update.mode);
+            player.mode = update.mode;
             player.score = update.score;
             player.alive = update.alive;
         }
@@ -385,21 +315,26 @@ private:
         HandlePlayerAction(action.playerId, action.targetX, action.targetY);
     }
     
+    void OnFullGameState(const GameState& state) {
+        std::cout << "[Game] Applying full game state..." << std::endl;
+        gameState = state;
+    }
+    
     void InitializeGrid() {
-        grid.resize(GRID_HEIGHT, std::vector<Cell>(GRID_WIDTH));
+        gameState.grid.resize(GRID_HEIGHT, std::vector<Cell>(GRID_WIDTH));
         
         // Add some initial shrubbery (reduced for smaller grid)
         for (int i = 0; i < 60; i++) {  // Reduced from 100
             int x = rng() % GRID_WIDTH;
             int y = rng() % GRID_HEIGHT;
-            if (grid[y][x].type == CellType::EMPTY) {
-                grid[y][x].type = CellType::SHRUBBERY;
+            if (gameState.grid[y][x].type == CellType::EMPTY) {
+                gameState.grid[y][x].type = CellType::SHRUBBERY;
             }
         }
     }
 
     void SpawnPlayer(int playerId) {
-        Player& player = players[playerId];
+        Player& player = gameState.players[playerId];
         
         // Spawn in random corner
         std::vector<std::pair<int, int>> corners = {
@@ -412,24 +347,24 @@ private:
         player.alive = true;
         
         // Clear the spawn location
-        grid[player.y][player.x].type = CellType::EMPTY;
+        gameState.grid[player.y][player.x].type = CellType::EMPTY;
     }
 
     void UpdateBullets() {
         const float BULLET_SPEED = 8.0f; // cells per second
         const float BULLET_LIFETIME = 2.0f; // seconds
         
-        for (auto it = bullets.begin(); it != bullets.end();) {
+        for (auto it = gameState.bullets.begin(); it != gameState.bullets.end();) {
             Bullet& bullet = *it;
             
             // Remove old bullets
             if (gameTime - bullet.startTime > BULLET_LIFETIME) {
-                it = bullets.erase(it);
+                it = gameState.bullets.erase(it);
                 continue;
             }
             
             if (!bullet.active) {
-                it = bullets.erase(it);
+                it = gameState.bullets.erase(it);
                 continue;
             }
             
@@ -442,39 +377,39 @@ private:
             
             // Check bounds
             if (newX < 0 || newX >= GRID_WIDTH || newY < 0 || newY >= GRID_HEIGHT) {
-                it = bullets.erase(it);
+                it = gameState.bullets.erase(it);
                 continue;
             }
             
             // Check for hits with animals
-            for (auto animalIt = animals.begin(); animalIt != animals.end(); ++animalIt) {
+            for (auto animalIt = gameState.animals.begin(); animalIt != gameState.animals.end(); ++animalIt) {
                 if (animalIt->x == newX && animalIt->y == newY) {
                     // Hit animal
-                    if (players.find(bullet.playerId) != players.end()) {
-                        players[bullet.playerId].score += 5;
+                    if (gameState.players.find(bullet.playerId) != gameState.players.end()) {
+                        gameState.players[bullet.playerId].score += 5;
                     }
-                    animals.erase(animalIt);
+                    gameState.animals.erase(animalIt);
                     bullet.active = false;
                     break;
                 }
             }
             
             if (!bullet.active) {
-                it = bullets.erase(it);
+                it = gameState.bullets.erase(it);
                 continue;
             }
             
             // Check for hits with other players
-            for (auto& [id, otherPlayer] : players) {
+            for (auto& [id, otherPlayer] : gameState.players) {
                 if (id != bullet.playerId && otherPlayer.x == newX && otherPlayer.y == newY && otherPlayer.alive) {
                     otherPlayer.alive = false;
-                    if (players.find(bullet.playerId) != players.end()) {
-                        players[bullet.playerId].score -= 5;
+                    if (gameState.players.find(bullet.playerId) != gameState.players.end()) {
+                        gameState.players[bullet.playerId].score -= 5;
                     }
                     
                     // Create grave
-                    grid[newY][newX].type = CellType::GRAVE;
-                    grid[newY][newX].playerId = id;
+                    gameState.grid[newY][newX].type = CellType::GRAVE;
+                    gameState.grid[newY][newX].playerId = id;
                     
                     // Respawn the killed player
                     SpawnPlayer(id);
@@ -484,15 +419,15 @@ private:
             }
             
             if (!bullet.active) {
-                it = bullets.erase(it);
+                it = gameState.bullets.erase(it);
                 continue;
             }
             
             // Check for obstacles (trees)
-            Cell& cell = grid[newY][newX];
+            Cell& cell = gameState.grid[newY][newX];
             if (cell.type == CellType::TREE_MATURE || cell.type == CellType::TREE_YOUNG) {
                 bullet.active = false;
-                it = bullets.erase(it);
+                it = gameState.bullets.erase(it);
                 continue;
             }
             
@@ -502,7 +437,7 @@ private:
     
     void UpdateAnimals() {
         // Spawn new animals
-        if (animals.size() < MAX_ANIMALS && (rng() % 1000) < (ANIMAL_SPAWN_RATE * 1000)) {
+        if (gameState.animals.size() < MAX_ANIMALS && (rng() % 1000) < (ANIMAL_SPAWN_RATE * 1000)) {
             Animal animal;
             animal.type = (rng() % 2 == 0) ? AnimalType::RABBIT : AnimalType::DEER;
             animal.x = rng() % GRID_WIDTH;
@@ -510,13 +445,13 @@ private:
             animal.id = nextAnimalId++;
             animal.moveDelay = 0.5f + (rng() % 100) / 100.0f;
             
-            if (grid[animal.y][animal.x].type == CellType::EMPTY) {
-                animals.push_back(animal);
+            if (gameState.grid[animal.y][animal.x].type == CellType::EMPTY) {
+                gameState.animals.push_back(animal);
             }
         }
 
         // Move and update animals
-        for (auto& animal : animals) {
+        for (auto& animal : gameState.animals) {
             if (gameTime - animal.lastMove > animal.moveDelay) {
                 // Try to move towards food
                 int newX = animal.x;
@@ -534,7 +469,7 @@ private:
                     int testY = animal.y + move.second;
                     
                     if (testX >= 0 && testX < GRID_WIDTH && testY >= 0 && testY < GRID_HEIGHT) {
-                        Cell& cell = grid[testY][testX];
+                        Cell& cell = gameState.grid[testY][testX];
                         
                         // Can eat shrubbery or young trees
                         if (cell.type == CellType::SHRUBBERY || 
@@ -565,7 +500,7 @@ private:
     void UpdateTrees() {
         for (int y = 0; y < GRID_HEIGHT; y++) {
             for (int x = 0; x < GRID_WIDTH; x++) {
-                Cell& cell = grid[y][x];
+                Cell& cell = gameState.grid[y][x];
                 
                 if (cell.type == CellType::TREE_SEEDLING || cell.type == CellType::TREE_YOUNG) {
                     if (gameTime - cell.lastUpdate > 1.0f) {
@@ -584,9 +519,9 @@ private:
     }
 
     void HandlePlayerAction(int playerId, int targetX, int targetY) {
-        if (players.find(playerId) == players.end() || !players[playerId].alive) return;
+        if (gameState.players.find(playerId) == gameState.players.end() || !gameState.players[playerId].alive) return;
         
-        Player& player = players[playerId];
+        Player& player = gameState.players[playerId];
         
         // Prevent spam actions
         if (gameTime - player.lastAction < 0.2f) return;
@@ -605,7 +540,7 @@ private:
                 
                 if (plantX < 0 || plantX >= GRID_WIDTH || plantY < 0 || plantY >= GRID_HEIGHT) return;
                 
-                Cell& cell = grid[plantY][plantX];
+                Cell& cell = gameState.grid[plantY][plantX];
                 if (cell.type == CellType::EMPTY || cell.type == CellType::SHRUBBERY) {
                     cell.type = CellType::TREE_SEEDLING;
                     cell.playerId = playerId;
@@ -627,7 +562,7 @@ private:
                 
                 if (chopX < 0 || chopX >= GRID_WIDTH || chopY < 0 || chopY >= GRID_HEIGHT) return;
                 
-                Cell& cell = grid[chopY][chopX];
+                Cell& cell = gameState.grid[chopY][chopX];
                 if (cell.type == CellType::TREE_MATURE) {
                     cell.type = CellType::EMPTY;
                     cell.playerId = -1;
@@ -662,7 +597,7 @@ private:
                 bullet.startTime = gameTime;
                 bullet.active = true;
                 
-                bullets.push_back(bullet);
+                gameState.bullets.push_back(bullet);
                 
                 // Play shoot sound effect
                 if (soundsLoaded && audioResumed) {
@@ -887,7 +822,7 @@ public:
         Player localPlayer;
         localPlayer.id = localPlayerId;
         localPlayer.color = PLAYER_COLORS[localPlayerId % 8];
-        players[localPlayerId] = localPlayer;
+        gameState.players[localPlayerId] = localPlayer;
         SpawnPlayer(localPlayerId);
     }
     
@@ -923,22 +858,13 @@ public:
         audioResumed = true; // Native platforms don't need this
         #endif
 
-        Player& localPlayer = players[localPlayerId];
+        Player& localPlayer = gameState.players[localPlayerId];
 
         // Send periodic network updates (every 100ms)
         static float lastNetworkUpdate = 0.0f;
         if (gameTime - lastNetworkUpdate > 0.1f && isMultiplayer) {
             // Send local player update
-            PlayerUpdate update;
-            update.id = localPlayer.id;
-            update.x = localPlayer.x;
-            update.y = localPlayer.y;
-            update.mode = static_cast<int>(localPlayer.mode);
-            update.score = localPlayer.score;
-            update.alive = localPlayer.alive;
-
-            std::cout << "[Game] Sending player update: ID=" << update.id << " pos=(" << update.x << "," << update.y << ")" << std::endl;
-            networkManager->SendPlayerUpdate(update);
+            networkManager->SendPlayerUpdate(localPlayer);
             lastNetworkUpdate = gameTime;
         }
         
@@ -970,7 +896,7 @@ public:
             static float lastStatusLog = 0.0f;
             if (gameTime - lastStatusLog > 2.0f) { // Log every 2 seconds
                 std::cout << "[Game] Multiplayer active - Host: " << (isHost ? "yes" : "no")
-                         << " Room: " << currentRoom << " Players: " << players.size() << std::endl;
+                         << " Room: " << currentRoom << " Players: " << gameState.players.size() << std::endl;
                 lastStatusLog = gameTime;
             }
         }
@@ -1049,31 +975,31 @@ public:
         // Draw grid
         for (int y = 0; y < GRID_HEIGHT; y++) {
             for (int x = 0; x < GRID_WIDTH; x++) {
-                DrawCell(x, y, grid[y][x]);
+                DrawCell(x, y, gameState.grid[y][x]);
             }
         }
         
         // Draw animals
-        for (const auto& animal : animals) {
+        for (const auto& animal : gameState.animals) {
             DrawAnimal(animal);
         }
         
         // Draw bullets
-        for (const auto& bullet : bullets) {
+        for (const auto& bullet : gameState.bullets) {
             DrawBullet(bullet);
         }
         
         // Draw players
-        for (const auto& [id, player] : players) {
+        for (const auto& [id, player] : gameState.players) {
             DrawPlayer(player);
         }
         
         // Draw UI
-        DrawText(TextFormat("Score: %d", players[localPlayerId].score), 10, 10, 20, WHITE);
+        DrawText(TextFormat("Score: %d", gameState.players[localPlayerId].score), 10, 10, 20, WHITE);
         
         const char* modeText = "Plant";
-        if (players[localPlayerId].mode == PlayerMode::SHOOT) modeText = "Shoot";
-        else if (players[localPlayerId].mode == PlayerMode::CHOP) modeText = "Chop";
+        if (gameState.players[localPlayerId].mode == PlayerMode::SHOOT) modeText = "Shoot";
+        else if (gameState.players[localPlayerId].mode == PlayerMode::CHOP) modeText = "Chop";
         
         DrawText(TextFormat("Mode: %s (P to switch)", modeText), 10, 35, 20, WHITE);
         DrawText("WASD/Arrows: Move, SPACE: Action", 10, 60, 16, WHITE);
@@ -1094,12 +1020,12 @@ public:
         
         // Show shooting direction
         int uiOffset = spritesLoaded ? 80 : 100;
-        if (players[localPlayerId].mode == PlayerMode::SHOOT) {
+        if (gameState.players[localPlayerId].mode == PlayerMode::SHOOT) {
             const char* dirText = "No direction";
-            if (players[localPlayerId].lastDirectionX > 0) dirText = "Shooting →";
-            else if (players[localPlayerId].lastDirectionX < 0) dirText = "Shooting ←";
-            else if (players[localPlayerId].lastDirectionY > 0) dirText = "Shooting ↓";
-            else if (players[localPlayerId].lastDirectionY < 0) dirText = "Shooting ↑";
+            if (gameState.players[localPlayerId].lastDirectionX > 0) dirText = "Shooting →";
+            else if (gameState.players[localPlayerId].lastDirectionX < 0) dirText = "Shooting ←";
+            else if (gameState.players[localPlayerId].lastDirectionY > 0) dirText = "Shooting ↓";
+            else if (gameState.players[localPlayerId].lastDirectionY < 0) dirText = "Shooting ↑";
             
             DrawText(dirText, 10, uiOffset, 16, YELLOW);
             uiOffset += 20;
@@ -1121,17 +1047,17 @@ public:
     }
 
     void AddPlayer(int playerId) {
-        if (players.find(playerId) == players.end()) {
+        if (gameState.players.find(playerId) == gameState.players.end()) {
             Player newPlayer;
             newPlayer.id = playerId;
             newPlayer.color = PLAYER_COLORS[playerId % 8];
-            players[playerId] = newPlayer;
+            gameState.players[playerId] = newPlayer;
             SpawnPlayer(playerId);
         }
     }
 
     void RemovePlayer(int playerId) {
-        players.erase(playerId);
+        gameState.players.erase(playerId);
     }
 };
 

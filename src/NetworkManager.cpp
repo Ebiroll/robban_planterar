@@ -32,6 +32,9 @@ extern "C" {
     EMSCRIPTEN_KEEPALIVE
     void OnPlayerJoined(const char* peerId) {
         std::cout << "[C++] Player joined: " << peerId << std::endl;
+        if (g_networkManager) {
+            g_networkManager->HandlePlayerJoined(peerId);
+        }
     }
     
     EMSCRIPTEN_KEEPALIVE
@@ -77,7 +80,7 @@ extern "C" {
             std::cout << "[C++] Message type: " << type << std::endl;
 
             if (type == "PLAYER_MOVE") {
-                PlayerUpdate update = {};
+                Player update = {};
 
                 std::string idStr = extractValue("playerId");
                 std::string xStr = extractValue("x");
@@ -89,7 +92,7 @@ extern "C" {
                 if (!idStr.empty()) update.id = std::stoi(idStr);
                 if (!xStr.empty()) update.x = std::stoi(xStr);
                 if (!yStr.empty()) update.y = std::stoi(yStr);
-                if (!modeStr.empty()) update.mode = std::stoi(modeStr);
+                if (!modeStr.empty()) update.mode = static_cast<PlayerMode>(std::stoi(modeStr));
                 if (!scoreStr.empty()) update.score = std::stoi(scoreStr);
                 update.alive = (aliveStr == "true");
 
@@ -128,6 +131,51 @@ extern "C" {
                 int newMode = modeStr.empty() ? 0 : std::stoi(modeStr);
 
                 std::cout << "[C++] Player " << playerId << " changed mode to " << newMode << std::endl;
+            } else if (type == "FULL_GAME_STATE") {
+                std::cout << "[C++] Full game state received" << std::endl;
+                 if (g_networkManager) {
+                    GameState state;
+                    std::string players_str = extractValue("players");
+                    
+                     size_t current_pos = 0;
+                     while(current_pos < players_str.length()) {
+                        size_t start_obj = players_str.find('{', current_pos);
+                        if (start_obj == std::string::npos) break;
+                        size_t end_obj = players_str.find('}', start_obj);
+                        if (end_obj == std::string::npos) break;
+
+                        std::string player_obj_str = players_str.substr(start_obj, end_obj - start_obj + 1);
+                        
+                         auto extractPlayerValue = [&](const std::string& key) -> std::string {
+                             std::string search = "\"" + key + "\":";
+                             size_t pos = player_obj_str.find(search);
+                             if (pos == std::string::npos) return "";
+                             pos += search.length();
+                             if (player_obj_str[pos] == '"') {
+                                 pos++;
+                                 size_t endPos = player_obj_str.find('"', pos);
+                                 return player_obj_str.substr(pos, endPos - pos);
+                             } else {
+                                 size_t endPos = pos;
+                                 while (endPos < player_obj_str.length() && player_obj_str[endPos] != ',' && player_obj_str[endPos] != '}') endPos++;
+                                 return player_obj_str.substr(pos, endPos - pos);
+                             }
+                         };
+
+                        Player p;
+                        p.id = std::stoi(extractPlayerValue("id"));
+                        p.x = std::stoi(extractPlayerValue("x"));
+                        p.y = std::stoi(extractPlayerValue("y"));
+                        p.mode = static_cast<PlayerMode>(std::stoi(extractPlayerValue("mode")));
+                        p.score = std::stoi(extractPlayerValue("score"));
+                        p.alive = extractPlayerValue("alive") == "true";
+
+                        state.players[p.id] = p;
+
+                        current_pos = end_obj + 1;
+                     }
+                     g_networkManager->OnFullGameState(state);
+                }
             } else {
                 std::cout << "[C++] Unknown message type: " << type << std::endl;
             }
@@ -165,28 +213,6 @@ extern "C" {
 #endif
 
 // JSON-like serialization helpers
-std::string SerializePlayerUpdate(const PlayerUpdate& update) {
-    std::ostringstream oss;
-    oss << update.id << "," << update.x << "," << update.y << "," 
-        << update.mode << "," << update.score << "," << (update.alive ? 1 : 0);
-    return oss.str();
-}
-
-PlayerUpdate DeserializePlayerUpdate(const std::string& data) {
-    PlayerUpdate update = {};
-    std::istringstream iss(data);
-    std::string token;
-    
-    if (std::getline(iss, token, ',')) update.id = std::stoi(token);
-    if (std::getline(iss, token, ',')) update.x = std::stoi(token);
-    if (std::getline(iss, token, ',')) update.y = std::stoi(token);
-    if (std::getline(iss, token, ',')) update.mode = std::stoi(token);
-    if (std::getline(iss, token, ',')) update.score = std::stoi(token);
-    if (std::getline(iss, token, ',')) update.alive = (std::stoi(token) == 1);
-    
-    return update;
-}
-
 std::string SerializeAction(const ActionMessage& action) {
     std::ostringstream oss;
     oss << action.playerId << "," << action.targetX << "," << action.targetY << "," << action.actionType;
@@ -204,6 +230,27 @@ ActionMessage DeserializeAction(const std::string& data) {
     if (std::getline(iss, token, ',')) action.actionType = std::stoi(token);
     
     return action;
+}
+
+std::string SerializeGameState(const GameState& state) {
+    std::ostringstream oss;
+    oss << "{\"type\":\"FULL_GAME_STATE\",\"players\":[";
+    bool first = true;
+    for (const auto& [id, player] : state.players) {
+        if (!first) {
+            oss << ",";
+        }
+        oss << "{\"id\":" << player.id
+            << ",\"x\":" << player.x
+            << ",\"y\":" << player.y
+            << ",\"mode\":" << static_cast<int>(player.mode)
+            << ",\"score\":" << player.score
+            << ",\"alive\":" << (player.alive ? "true" : "false")
+            << "}";
+        first = false;
+    }
+    oss << "]}";
+    return oss.str();
 }
 
 NetworkManager::NetworkManager() {
@@ -228,9 +275,15 @@ NetworkManager::NetworkManager() {
 NetworkManager::~NetworkManager() {
     Disconnect();
 }
-
+void NetworkManager::HandlePlayerJoined(const std::string& peerId) {
+    int newPlayerId = connectedPeers.size() + 1; // Simple ID assignment for now
+    connectedPeers[newPlayerId] = peerId;
+    if (onPlayerJoin) {
+        onPlayerJoin(newPlayerId);
+    }
+}
 bool NetworkManager::CreateRoom(const std::string& roomName) {
-    #ifdef PLATFORM_WEB
+#ifdef PLATFORM_WEB
     // On web, PeerJS auto-generates room ID
     if (JS_CreateRoom()) {
         isHost = true;
@@ -313,7 +366,7 @@ void NetworkManager::Disconnect() {
     }
 }
 
-void NetworkManager::SendPlayerUpdate(const PlayerUpdate& update) {
+void NetworkManager::SendPlayerUpdate(const Player& update) {
     if (!isConnected) return;
     
     #ifdef PLATFORM_WEB
@@ -321,7 +374,7 @@ void NetworkManager::SendPlayerUpdate(const PlayerUpdate& update) {
     std::ostringstream json;
     json << "{\"type\":\"PLAYER_MOVE\",\"playerId\":" << update.id
          << ",\"x\":" << update.x << ",\"y\":" << update.y
-         << ",\"mode\":" << update.mode << ",\"score\":" << update.score
+         << ",\"mode\":" << static_cast<int>(update.mode) << ",\"score\":" << update.score
          << ",\"alive\":" << (update.alive ? "true" : "false") << "}";
     
     JS_BroadcastMessage(json.str().c_str());
@@ -329,7 +382,10 @@ void NetworkManager::SendPlayerUpdate(const PlayerUpdate& update) {
     NetworkMessage msg;
     msg.type = MessageType::PLAYER_MOVE;
     msg.playerId = update.id;
-    msg.data = SerializePlayerUpdate(update);
+    std::ostringstream oss;
+    oss << update.id << "," << update.x << "," << update.y << ","
+        << static_cast<int>(update.mode) << "," << update.score << "," << (update.alive ? 1 : 0);
+    msg.data = oss.str();
     msg.timestamp = std::chrono::duration<float>(std::chrono::steady_clock::now().time_since_epoch()).count();
     
     std::lock_guard<std::mutex> lock(messageMutex);
@@ -382,6 +438,17 @@ void NetworkManager::SendPlayerModeChange(int playerId, int newMode) {
     #endif
 }
 
+void NetworkManager::SendGameState(const GameState& state) {
+    if (!isConnected) return;
+
+#ifdef PLATFORM_WEB
+    std::string stateStr = SerializeGameState(state);
+    JS_BroadcastMessage(stateStr.c_str());
+#else
+    // Native implementation would go here
+#endif
+}
+
 void NetworkManager::ProcessMessages() {
     std::lock_guard<std::mutex> lock(messageMutex);
     
@@ -408,7 +475,17 @@ void NetworkManager::ProcessIncomingMessage(const NetworkMessage& msg) {
             break;
             
         case MessageType::PLAYER_MOVE: {
-            PlayerUpdate update = DeserializePlayerUpdate(msg.data);
+            Player update = {};
+            std::istringstream iss(msg.data);
+            std::string token;
+            
+            if (std::getline(iss, token, ',')) update.id = std::stoi(token);
+            if (std::getline(iss, token, ',')) update.x = std::stoi(token);
+            if (std::getline(iss, token, ',')) update.y = std::stoi(token);
+            if (std::getline(iss, token, ',')) update.mode = static_cast<PlayerMode>(std::stoi(token));
+            if (std::getline(iss, token, ',')) update.score = std::stoi(token);
+            if (std::getline(iss, token, ',')) update.alive = (std::stoi(token) == 1);
+
             if (onPlayerUpdate) {
                 onPlayerUpdate(update);
             }
