@@ -315,10 +315,10 @@ private:
             player.mode = update.mode;
             player.score = update.score;
             player.alive = update.alive;
-            std::cout << "Updated player " << update.id << " position: (" << update.x << "," << update.y << ")" << std::endl;
+            player.lastDirectionX = update.lastDirectionX;
+            player.lastDirectionY = update.lastDirectionY;
         } else {
             // If player doesn't exist yet, add them
-            std::cout << "Adding new player " << update.id << " from network update" << std::endl;
             AddPlayer(update.id);
             Player& player = gameState.players[update.id];
             player.x = update.x;
@@ -326,6 +326,8 @@ private:
             player.mode = update.mode;
             player.score = update.score;
             player.alive = update.alive;
+            player.lastDirectionX = update.lastDirectionX;
+            player.lastDirectionY = update.lastDirectionY;
         }
     }
     
@@ -885,12 +887,25 @@ public:
 
         Player& localPlayer = gameState.players[localPlayerId];
 
-        // Send periodic network updates (every 200ms to reduce spam)
-        static float lastNetworkUpdate = 0.0f;
-        if (gameTime - lastNetworkUpdate > 0.2f && isMultiplayer) {
-            // Send local player update
-            networkManager->SendPlayerUpdate(localPlayer);
-            lastNetworkUpdate = gameTime;
+        // Send network updates only when player state changes
+        static Player lastSentState = {};
+        static bool hasInitialState = false;
+        
+        if (isMultiplayer) {
+            bool stateChanged = !hasInitialState ||
+                               lastSentState.x != localPlayer.x ||
+                               lastSentState.y != localPlayer.y ||
+                               lastSentState.mode != localPlayer.mode ||
+                               lastSentState.score != localPlayer.score ||
+                               lastSentState.alive != localPlayer.alive ||
+                               lastSentState.lastDirectionX != localPlayer.lastDirectionX ||
+                               lastSentState.lastDirectionY != localPlayer.lastDirectionY;
+            
+            if (stateChanged) {
+                networkManager->SendPlayerUpdate(localPlayer);
+                lastSentState = localPlayer;
+                hasInitialState = true;
+            }
         }
         
         // Host sends full game state periodically (every 500ms) to sync animals and other state

@@ -47,9 +47,25 @@ extern "C" {
     void OnNetworkMessage(const char* message) {
         std::cout << "[C++] Network message received: " << message << std::endl;
 
+        // Host only rebroadcasts certain message types, not player moves
         if (g_networkManager && g_networkManager->IsHost()) {
-            std::cout << "[C++] Host rebroadcasting message to all clients" << std::endl;
-            JS_BroadcastMessage(message);
+            std::string msgStr(message);
+            auto extractType = [&]() -> std::string {
+                std::string search = "\"type\":";
+                size_t pos = msgStr.find(search);
+                if (pos == std::string::npos) return "";
+                pos += search.length();
+                while (pos < msgStr.length() && (msgStr[pos] == ' ' || msgStr[pos] == '\t' || msgStr[pos] == '"')) pos++;
+                size_t endPos = msgStr.find('"', pos);
+                if (endPos == std::string::npos) return "";
+                return msgStr.substr(pos, endPos - pos);
+            };
+            
+            std::string type = extractType();
+            // Only rebroadcast actions, not player moves (clients already see their own moves)
+            if (type == "PLAYER_ACTION") {
+                JS_BroadcastMessage(message);
+            }
         }
 
         // Parse JSON message and update game state
@@ -94,6 +110,8 @@ extern "C" {
                 std::string modeStr = extractValue("mode");
                 std::string scoreStr = extractValue("score");
                 std::string aliveStr = extractValue("alive");
+                std::string dirXStr = extractValue("dirX");
+                std::string dirYStr = extractValue("dirY");
 
                 if (!idStr.empty()) update.id = std::stoi(idStr);
                 if (!xStr.empty()) update.x = std::stoi(xStr);
@@ -101,6 +119,8 @@ extern "C" {
                 if (!modeStr.empty()) update.mode = static_cast<PlayerMode>(std::stoi(modeStr));
                 if (!scoreStr.empty()) update.score = std::stoi(scoreStr);
                 update.alive = (aliveStr == "true");
+                if (!dirXStr.empty()) update.lastDirectionX = std::stoi(dirXStr);
+                if (!dirYStr.empty()) update.lastDirectionY = std::stoi(dirYStr);
 
                 // Update player if we have a valid network manager
                 if (g_networkManager) {
@@ -199,6 +219,11 @@ extern "C" {
                         p.mode = static_cast<PlayerMode>(std::stoi(extractPlayerValue("mode")));
                         p.score = std::stoi(extractPlayerValue("score"));
                         p.alive = extractPlayerValue("alive") == "true";
+                        
+                        std::string dirXStr = extractPlayerValue("dirX");
+                        std::string dirYStr = extractPlayerValue("dirY");
+                        if (!dirXStr.empty()) p.lastDirectionX = std::stoi(dirXStr);
+                        if (!dirYStr.empty()) p.lastDirectionY = std::stoi(dirYStr);
 
                         state.players[p.id] = p;
 
@@ -333,6 +358,8 @@ std::string SerializeGameState(const GameState& state) {
             << ",\"mode\":" << static_cast<int>(player.mode)
             << ",\"score\":" << player.score
             << ",\"alive\":" << (player.alive ? "true" : "false")
+            << ",\"dirX\":" << player.lastDirectionX
+            << ",\"dirY\":" << player.lastDirectionY
             << "}";
         first = false;
     }
@@ -478,7 +505,9 @@ void NetworkManager::SendPlayerUpdate(const Player& update) {
     json << "{\"type\":\"PLAYER_MOVE\",\"playerId\":" << update.id
          << ",\"x\":" << update.x << ",\"y\":" << update.y
          << ",\"mode\":" << static_cast<int>(update.mode) << ",\"score\":" << update.score
-         << ",\"alive\":" << (update.alive ? "true" : "false") << "}";
+         << ",\"alive\":" << (update.alive ? "true" : "false")
+         << ",\"dirX\":" << update.lastDirectionX
+         << ",\"dirY\":" << update.lastDirectionY << "}";
     
     JS_BroadcastMessage(json.str().c_str());
     #else
@@ -487,7 +516,8 @@ void NetworkManager::SendPlayerUpdate(const Player& update) {
     msg.playerId = update.id;
     std::ostringstream oss;
     oss << update.id << "," << update.x << "," << update.y << ","
-        << static_cast<int>(update.mode) << "," << update.score << "," << (update.alive ? 1 : 0);
+        << static_cast<int>(update.mode) << "," << update.score << "," << (update.alive ? 1 : 0)
+        << "," << update.lastDirectionX << "," << update.lastDirectionY;
     msg.data = oss.str();
     msg.timestamp = std::chrono::duration<float>(std::chrono::steady_clock::now().time_since_epoch()).count();
     
@@ -606,6 +636,8 @@ void NetworkManager::ProcessIncomingMessage(const NetworkMessage& msg) {
             if (std::getline(iss, token, ',')) update.mode = static_cast<PlayerMode>(std::stoi(token));
             if (std::getline(iss, token, ',')) update.score = std::stoi(token);
             if (std::getline(iss, token, ',')) update.alive = (std::stoi(token) == 1);
+            if (std::getline(iss, token, ',')) update.lastDirectionX = std::stoi(token);
+            if (std::getline(iss, token, ',')) update.lastDirectionY = std::stoi(token);
 
             if (onPlayerUpdate) {
                 onPlayerUpdate(update);
