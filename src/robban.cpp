@@ -256,6 +256,10 @@ private:
             this->localPlayerId = playerId;
             std::cout << "Assigned player ID: " << playerId << std::endl;
             
+            // Enable multiplayer mode when we receive a player ID assignment
+            isMultiplayer = true;
+            isHost = (playerId == 0);  // Player 0 is the host
+            
             // Create the player if it doesn't exist yet
             if (gameState.players.find(playerId) == gameState.players.end()) {
                 Player localPlayer;
@@ -326,7 +330,7 @@ private:
     }
     
     void OnPlayerAction(const ActionMessage& action) {
-        HandlePlayerAction(action.playerId, action.targetX, action.targetY);
+        HandlePlayerAction(action.playerId, action.targetX, action.targetY, action.actionType);
     }
     
     void OnFullGameState(const GameState& state) {
@@ -450,6 +454,11 @@ private:
     }
     
     void UpdateAnimals() {
+        // Only host spawns and updates animals
+        if (!isHost) {
+            return;
+        }
+        
         // Spawn new animals
         if (gameState.animals.size() < MAX_ANIMALS && (rng() % 1000) < (ANIMAL_SPAWN_RATE * 1000)) {
             Animal animal;
@@ -532,16 +541,19 @@ private:
         }
     }
 
-    void HandlePlayerAction(int playerId, int targetX, int targetY) {
+    void HandlePlayerAction(int playerId, int targetX, int targetY, int actionType = -1) {
         if (gameState.players.find(playerId) == gameState.players.end() || !gameState.players[playerId].alive) return;
-        
+
         Player& player = gameState.players[playerId];
-        
+
         // Prevent spam actions
         if (gameTime - player.lastAction < 0.2f) return;
         player.lastAction = gameTime;
-        
-        switch (player.mode) {
+
+        // Use provided actionType for remote actions, otherwise use player's current mode
+        PlayerMode modeToUse = (actionType >= 0) ? static_cast<PlayerMode>(actionType) : player.mode;
+
+        switch (modeToUse) {
             case PlayerMode::PLANT: {
                 // Plant at player's current location or adjacent cell
                 int plantX = targetX != -1 ? targetX : player.x;
@@ -873,12 +885,19 @@ public:
 
         Player& localPlayer = gameState.players[localPlayerId];
 
-        // Send periodic network updates (every 100ms)
+        // Send periodic network updates (every 200ms to reduce spam)
         static float lastNetworkUpdate = 0.0f;
-        if (gameTime - lastNetworkUpdate > 0.1f && isMultiplayer) {
+        if (gameTime - lastNetworkUpdate > 0.2f && isMultiplayer) {
             // Send local player update
             networkManager->SendPlayerUpdate(localPlayer);
             lastNetworkUpdate = gameTime;
+        }
+        
+        // Host sends full game state periodically (every 500ms) to sync animals and other state
+        static float lastGameStateSync = 0.0f;
+        if (isHost && isMultiplayer && gameTime - lastGameStateSync > 0.5f) {
+            networkManager->SendGameState(gameState);
+            lastGameStateSync = gameTime;
         }
         
         // Network controls

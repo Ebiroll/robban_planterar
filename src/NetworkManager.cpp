@@ -102,8 +102,6 @@ extern "C" {
                 if (!scoreStr.empty()) update.score = std::stoi(scoreStr);
                 update.alive = (aliveStr == "true");
 
-                std::cout << "[C++] Player move: ID=" << update.id << " pos=(" << update.x << "," << update.y << ")" << std::endl;
-
                 // Update player if we have a valid network manager
                 if (g_networkManager) {
                     g_networkManager->OnPlayerUpdate(update);
@@ -206,6 +204,39 @@ extern "C" {
 
                         current_pos = end_obj + 1;
                      }
+                     
+                     // Parse animals
+                     std::string animals_str = extractValue("animals");
+                     current_pos = 0;
+                     while(current_pos < animals_str.length()) {
+                        size_t start_obj = animals_str.find('{', current_pos);
+                        if (start_obj == std::string::npos) break;
+                        size_t end_obj = animals_str.find('}', start_obj);
+                        if (end_obj == std::string::npos) break;
+
+                        std::string animal_obj_str = animals_str.substr(start_obj, end_obj - start_obj + 1);
+                        
+                        auto extractAnimalValue = [&](const std::string& key) -> std::string {
+                            std::string search = "\"" + key + "\":";
+                            size_t pos = animal_obj_str.find(search);
+                            if (pos == std::string::npos) return "";
+                            pos += search.length();
+                            size_t endPos = pos;
+                            while (endPos < animal_obj_str.length() && animal_obj_str[endPos] != ',' && animal_obj_str[endPos] != '}') endPos++;
+                            return animal_obj_str.substr(pos, endPos - pos);
+                        };
+
+                        Animal a;
+                        a.id = std::stoi(extractAnimalValue("id"));
+                        a.type = static_cast<AnimalType>(std::stoi(extractAnimalValue("type")));
+                        a.x = std::stoi(extractAnimalValue("x"));
+                        a.y = std::stoi(extractAnimalValue("y"));
+
+                        state.animals.push_back(a);
+
+                        current_pos = end_obj + 1;
+                     }
+                     
                      g_networkManager->OnFullGameState(state);
                 }
             } else if (type == "ASSIGN_PLAYER_ID") {
@@ -302,6 +333,22 @@ std::string SerializeGameState(const GameState& state) {
             << ",\"mode\":" << static_cast<int>(player.mode)
             << ",\"score\":" << player.score
             << ",\"alive\":" << (player.alive ? "true" : "false")
+            << "}";
+        first = false;
+    }
+    oss << "],";
+    
+    // Serialize animals
+    oss << "\"animals\":[";
+    first = true;
+    for (const auto& animal : state.animals) {
+        if (!first) {
+            oss << ",";
+        }
+        oss << "{\"id\":" << animal.id
+            << ",\"type\":" << static_cast<int>(animal.type)
+            << ",\"x\":" << animal.x
+            << ",\"y\":" << animal.y
             << "}";
         first = false;
     }
@@ -433,7 +480,6 @@ void NetworkManager::SendPlayerUpdate(const Player& update) {
          << ",\"mode\":" << static_cast<int>(update.mode) << ",\"score\":" << update.score
          << ",\"alive\":" << (update.alive ? "true" : "false") << "}";
     
-    std::cout << "[C++] Sending player update for player " << update.id << " at (" << update.x << "," << update.y << ")" << std::endl;
     JS_BroadcastMessage(json.str().c_str());
     #else
     NetworkMessage msg;
