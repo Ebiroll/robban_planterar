@@ -362,8 +362,14 @@ private:
             preservedLocalPlayer = gameState.players[localPlayerId];
         }
         
+        // Preserve bullets - they are created via actions which are already synced
+        auto preservedBullets = gameState.bullets;
+        
         // Apply the received state
         gameState = state;
+        
+        // Restore bullets - bullets are synced via actions, not full game state
+        gameState.bullets = preservedBullets;
         
         // Restore local player if it was preserved
         if (hasLocalPlayer) {

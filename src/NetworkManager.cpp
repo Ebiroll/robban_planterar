@@ -298,46 +298,8 @@ extern "C" {
                         current_pos = end_obj + 1;
                      }
                      
-                     // Parse bullets
-                     std::string bullets_str = extractValue("bullets");
-                     current_pos = 0;
-                     while(current_pos < bullets_str.length()) {
-                        size_t start_obj = bullets_str.find('{', current_pos);
-                        if (start_obj == std::string::npos) break;
-                        size_t end_obj = bullets_str.find('}', start_obj);
-                        if (end_obj == std::string::npos) break;
-
-                        std::string bullet_obj_str = bullets_str.substr(start_obj, end_obj - start_obj + 1);
-                        
-                        auto extractBulletValue = [&](const std::string& key) -> std::string {
-                            std::string search = "\"" + key + "\":";
-                            size_t pos = bullet_obj_str.find(search);
-                            if (pos == std::string::npos) return "";
-                            pos += search.length();
-                            if (bullet_obj_str[pos] == '"') {
-                                pos++;
-                                size_t endPos = bullet_obj_str.find('"', pos);
-                                return bullet_obj_str.substr(pos, endPos - pos);
-                            } else {
-                                size_t endPos = pos;
-                                while (endPos < bullet_obj_str.length() && bullet_obj_str[endPos] != ',' && bullet_obj_str[endPos] != '}') endPos++;
-                                return bullet_obj_str.substr(pos, endPos - pos);
-                            }
-                        };
-
-                        Bullet b;
-                        b.x = std::stoi(extractBulletValue("x"));
-                        b.y = std::stoi(extractBulletValue("y"));
-                        b.dirX = std::stoi(extractBulletValue("dirX"));
-                        b.dirY = std::stoi(extractBulletValue("dirY"));
-                        b.playerId = std::stoi(extractBulletValue("playerId"));
-                        b.startTime = std::stof(extractBulletValue("startTime"));
-                        b.active = extractBulletValue("active") == "true";
-
-                        state.bullets.push_back(b);
-
-                        current_pos = end_obj + 1;
-                     }
+                     // Note: Bullets are NOT parsed from game state
+                     // They are created via PLAYER_ACTION messages which are already synced
                      
                      g_networkManager->OnFullGameState(state);
                 }
@@ -459,26 +421,10 @@ std::string SerializeGameState(const GameState& state) {
             << "}";
         first = false;
     }
-    oss << "],";
-    
-    // Serialize bullets
-    oss << "\"bullets\":[";
-    first = true;
-    for (const auto& bullet : state.bullets) {
-        if (!first) {
-            oss << ",";
-        }
-        oss << "{\"x\":" << bullet.x
-            << ",\"y\":" << bullet.y
-            << ",\"dirX\":" << bullet.dirX
-            << ",\"dirY\":" << bullet.dirY
-            << ",\"playerId\":" << bullet.playerId
-            << ",\"startTime\":" << bullet.startTime
-            << ",\"active\":" << (bullet.active ? "true" : "false")
-            << "}";
-        first = false;
-    }
     oss << "]}";
+    
+    // Note: Bullets are NOT serialized in game state
+    // They are created via PLAYER_ACTION messages which are already synced
     
     return oss.str();
 }
