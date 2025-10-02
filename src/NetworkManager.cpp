@@ -90,6 +90,16 @@ extern "C" {
                 size_t endPos = msgStr.find('"', pos);
                 if (endPos == std::string::npos) return "";
                 return msgStr.substr(pos, endPos - pos);
+            } else if (msgStr[pos] == '[') {
+                // Array value - find matching closing bracket
+                size_t endPos = pos + 1;
+                int bracketCount = 1;
+                while (endPos < msgStr.length() && bracketCount > 0) {
+                    if (msgStr[endPos] == '[') bracketCount++;
+                    else if (msgStr[endPos] == ']') bracketCount--;
+                    endPos++;
+                }
+                return msgStr.substr(pos, endPos - pos);
             } else {
                 // Numeric or boolean value
                 size_t endPos = pos;
