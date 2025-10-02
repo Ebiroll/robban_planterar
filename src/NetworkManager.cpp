@@ -45,7 +45,26 @@ extern "C" {
     
     EMSCRIPTEN_KEEPALIVE
     void OnNetworkMessage(const char* message) {
-        std::cout << "[C++] Network message received: " << message << std::endl;
+        // Parse message type first to filter logging
+        std::string msgStr(message);
+        std::string type;
+        {
+            std::string search = "\"type\":";
+            size_t pos = msgStr.find(search);
+            if (pos != std::string::npos) {
+                pos += search.length();
+                while (pos < msgStr.length() && (msgStr[pos] == ' ' || msgStr[pos] == '\t' || msgStr[pos] == '"')) pos++;
+                size_t endPos = msgStr.find('"', pos);
+                if (endPos != std::string::npos) {
+                    type = msgStr.substr(pos, endPos - pos);
+                }
+            }
+        }
+        
+        // Only log non-FULL_GAME_STATE messages to reduce spam
+        if (type != "FULL_GAME_STATE") {
+            std::cout << "[C++] Network message received: " << type << std::endl;
+        }
 
         // Host only rebroadcasts certain message types, not player moves
         if (g_networkManager && g_networkManager->IsHost()) {
@@ -70,7 +89,7 @@ extern "C" {
         }
 
         // Parse JSON message and update game state
-        std::string msgStr(message);
+        // (msgStr already defined above for type checking)
 
         // Simple JSON parsing for key-value pairs
         auto extractValue = [&](const std::string& key) -> std::string {
@@ -110,7 +129,10 @@ extern "C" {
 
         try {
             std::string type = extractValue("type");
-            std::cout << "[C++] Message type: " << type << std::endl;
+            // Don't log FULL_GAME_STATE messages to reduce spam
+            if (type != "FULL_GAME_STATE") {
+                std::cout << "[C++] Message type: " << type << std::endl;
+            }
 
             if (type == "PLAYER_MOVE") {
                 Player update = {};
@@ -247,7 +269,6 @@ extern "C" {
                      
                      // Parse animals
                      std::string animals_str = extractValue("animals");
-                     std::cout << "[C++] Parsing animals, length: " << animals_str.length() << std::endl;
                      current_pos = 0;
                      while(current_pos < animals_str.length()) {
                         size_t start_obj = animals_str.find('{', current_pos);
@@ -274,12 +295,50 @@ extern "C" {
                         a.y = std::stoi(extractAnimalValue("y"));
 
                         state.animals.push_back(a);
-                        std::cout << "[C++] Parsed animal ID: " << a.id << " at (" << a.x << "," << a.y << ")" << std::endl;
+                        current_pos = end_obj + 1;
+                     }
+                     
+                     // Parse bullets
+                     std::string bullets_str = extractValue("bullets");
+                     current_pos = 0;
+                     while(current_pos < bullets_str.length()) {
+                        size_t start_obj = bullets_str.find('{', current_pos);
+                        if (start_obj == std::string::npos) break;
+                        size_t end_obj = bullets_str.find('}', start_obj);
+                        if (end_obj == std::string::npos) break;
+
+                        std::string bullet_obj_str = bullets_str.substr(start_obj, end_obj - start_obj + 1);
+                        
+                        auto extractBulletValue = [&](const std::string& key) -> std::string {
+                            std::string search = "\"" + key + "\":";
+                            size_t pos = bullet_obj_str.find(search);
+                            if (pos == std::string::npos) return "";
+                            pos += search.length();
+                            if (bullet_obj_str[pos] == '"') {
+                                pos++;
+                                size_t endPos = bullet_obj_str.find('"', pos);
+                                return bullet_obj_str.substr(pos, endPos - pos);
+                            } else {
+                                size_t endPos = pos;
+                                while (endPos < bullet_obj_str.length() && bullet_obj_str[endPos] != ',' && bullet_obj_str[endPos] != '}') endPos++;
+                                return bullet_obj_str.substr(pos, endPos - pos);
+                            }
+                        };
+
+                        Bullet b;
+                        b.x = std::stoi(extractBulletValue("x"));
+                        b.y = std::stoi(extractBulletValue("y"));
+                        b.dirX = std::stoi(extractBulletValue("dirX"));
+                        b.dirY = std::stoi(extractBulletValue("dirY"));
+                        b.playerId = std::stoi(extractBulletValue("playerId"));
+                        b.startTime = std::stof(extractBulletValue("startTime"));
+                        b.active = extractBulletValue("active") == "true";
+
+                        state.bullets.push_back(b);
 
                         current_pos = end_obj + 1;
                      }
                      
-                     std::cout << "[C++] Total animals parsed: " << state.animals.size() << std::endl;
                      g_networkManager->OnFullGameState(state);
                 }
             } else if (type == "ASSIGN_PLAYER_ID") {
@@ -400,11 +459,28 @@ std::string SerializeGameState(const GameState& state) {
             << "}";
         first = false;
     }
+    oss << "],";
+    
+    // Serialize bullets
+    oss << "\"bullets\":[";
+    first = true;
+    for (const auto& bullet : state.bullets) {
+        if (!first) {
+            oss << ",";
+        }
+        oss << "{\"x\":" << bullet.x
+            << ",\"y\":" << bullet.y
+            << ",\"dirX\":" << bullet.dirX
+            << ",\"dirY\":" << bullet.dirY
+            << ",\"playerId\":" << bullet.playerId
+            << ",\"startTime\":" << bullet.startTime
+            << ",\"active\":" << (bullet.active ? "true" : "false")
+            << "}";
+        first = false;
+    }
     oss << "]}";
     
-    std::string result = oss.str();
-    std::cout << "[SERIALIZE] Game state with " << state.animals.size() << " animals, length: " << result.length() << std::endl;
-    return result;
+    return oss.str();
 }
 
 NetworkManager::NetworkManager() {

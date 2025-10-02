@@ -180,7 +180,6 @@ mergeInto(LibraryManager.library, {
             if (PeerNetworkState.connections.hasOwnProperty(peerId)) {
                 try {
                     PeerNetworkState.connections[peerId].send(messageObj);
-                    console.log('[PeerNetwork] Sent to peer:', peerId);
                 } catch (e) {
                     console.error('[PeerNetwork] Error sending to', peerId, ':', e);
                 }
@@ -200,7 +199,6 @@ mergeInto(LibraryManager.library, {
         if (PeerNetworkState.connections.hasOwnProperty(peerId)) {
             try {
                 PeerNetworkState.connections[peerId].send(messageObj);
-                console.log('[PeerNetwork] Sent to peer:', peerId);
             } catch (e) {
                 console.error('[PeerNetwork] Error sending to', peerId, ':', e);
             }

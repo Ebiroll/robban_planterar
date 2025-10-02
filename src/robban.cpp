@@ -352,11 +352,8 @@ private:
     void OnFullGameState(const GameState& state) {
         // Host doesn't need to apply its own game state broadcasts
         if (isHost) {
-            std::cout << "[Game] Ignoring game state update (we are host)" << std::endl;
             return;
         }
-        
-        std::cout << "[Game] Applying full game state from host (animals: " << state.animals.size() << ")" << std::endl;
         // Preserve local player ID and don't overwrite local player data
         int preservedLocalId = localPlayerId;
         Player preservedLocalPlayer;
@@ -951,7 +948,6 @@ public:
         // Host sends full game state periodically (every 500ms) to sync animals and other state
         static float lastGameStateSync = 0.0f;
         if (isHost && isMultiplayer && gameTime - lastGameStateSync > 0.5f) {
-            std::cout << "[Game] Host syncing game state (animals: " << gameState.animals.size() << ")" << std::endl;
             networkManager->SendGameState(gameState);
             lastGameStateSync = gameTime;
         }
@@ -992,14 +988,6 @@ public:
                 } else {
                     std::cout << "[Game] Joining room: " << currentRoom << std::endl;
                 }
-            }
-        } else {
-            // Debug: show multiplayer status
-            static float lastStatusLog = 0.0f;
-            if (gameTime - lastStatusLog > 2.0f) { // Log every 2 seconds
-                std::cout << "[Game] Multiplayer active - Host: " << (isHost ? "yes" : "no")
-                         << " Room: " << currentRoom << " Players: " << gameState.players.size() << std::endl;
-                lastStatusLog = gameTime;
             }
         }
         
