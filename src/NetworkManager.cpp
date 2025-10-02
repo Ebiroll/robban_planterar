@@ -234,6 +234,12 @@ extern "C" {
                         if (!dirXStr.empty()) p.lastDirectionX = std::stoi(dirXStr);
                         if (!dirYStr.empty()) p.lastDirectionY = std::stoi(dirYStr);
 
+                        // Set player color based on ID (same as in AddPlayer)
+                        const Color PLAYER_COLORS[] = {
+                            BLUE, RED, GREEN, YELLOW, PURPLE, ORANGE, PINK, BROWN
+                        };
+                        p.color = PLAYER_COLORS[p.id % 8];
+
                         state.players[p.id] = p;
 
                         current_pos = end_obj + 1;
