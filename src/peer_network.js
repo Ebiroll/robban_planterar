@@ -169,9 +169,12 @@ mergeInto(LibraryManager.library, {
     JS_BroadcastMessage__deps: ['$PeerNetworkState'],
     JS_BroadcastMessage: function(messagePtr) {
         var message = UTF8ToString(messagePtr);
-        console.log('[PeerNetwork] Broadcasting message:', message);
-
         var messageObj = JSON.parse(message);
+        
+        // Only log non-FULL_GAME_STATE messages to reduce spam
+        if (messageObj.type !== 'FULL_GAME_STATE') {
+            console.log('[PeerNetwork] Broadcasting:', messageObj.type);
+        }
 
         for (var peerId in PeerNetworkState.connections) {
             if (PeerNetworkState.connections.hasOwnProperty(peerId)) {

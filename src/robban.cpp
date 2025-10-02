@@ -178,6 +178,7 @@ private:
     bool isMultiplayer = false;
     bool isHost = false;
     std::string currentRoom;
+    bool playerIdAssigned = false;  // Track if player ID has been assigned
     
     // Game state synchronization
 
@@ -254,27 +255,26 @@ private:
         // Set up network callbacks
         networkManager->SetPlayerIdAssignedCallback([this](int playerId) {
             // Only accept player ID assignment once to prevent being overwritten
-            static bool idAssigned = false;
-            if (idAssigned) {
+            if (this->playerIdAssigned) {
                 std::cout << "Ignoring duplicate player ID assignment: " << playerId << std::endl;
                 return;
             }
             
-            idAssigned = true;
+            this->playerIdAssigned = true;
             this->localPlayerId = playerId;
             std::cout << "Assigned player ID: " << playerId << std::endl;
             
             // Enable multiplayer mode when we receive a player ID assignment
-            isMultiplayer = true;
-            isHost = (playerId == 0);  // Player 0 is the host
+            this->isMultiplayer = true;
+            this->isHost = (playerId == 0);  // Player 0 is the host
             
             // Create the player if it doesn't exist yet
-            if (gameState.players.find(playerId) == gameState.players.end()) {
+            if (this->gameState.players.find(playerId) == this->gameState.players.end()) {
                 Player localPlayer;
                 localPlayer.id = playerId;
                 localPlayer.color = PLAYER_COLORS[playerId % 8];
-                gameState.players[playerId] = localPlayer;
-                SpawnPlayer(playerId);
+                this->gameState.players[playerId] = localPlayer;
+                this->SpawnPlayer(playerId);
             }
         });
 
@@ -352,10 +352,11 @@ private:
     void OnFullGameState(const GameState& state) {
         // Host doesn't need to apply its own game state broadcasts
         if (isHost) {
+            std::cout << "[Game] Ignoring game state update (we are host)" << std::endl;
             return;
         }
         
-        std::cout << "[Game] Applying full game state from host..." << std::endl;
+        std::cout << "[Game] Applying full game state from host (animals: " << state.animals.size() << ")" << std::endl;
         // Preserve local player ID and don't overwrite local player data
         int preservedLocalId = localPlayerId;
         Player preservedLocalPlayer;
@@ -918,6 +919,12 @@ public:
         audioResumed = true; // Native platforms don't need this
         #endif
 
+        // Ensure local player exists before accessing
+        if (gameState.players.find(localPlayerId) == gameState.players.end()) {
+            // Player doesn't exist yet, skip this frame
+            return;
+        }
+        
         Player& localPlayer = gameState.players[localPlayerId];
 
         // Send network updates only when player state changes
@@ -944,6 +951,7 @@ public:
         // Host sends full game state periodically (every 500ms) to sync animals and other state
         static float lastGameStateSync = 0.0f;
         if (isHost && isMultiplayer && gameTime - lastGameStateSync > 0.5f) {
+            std::cout << "[Game] Host syncing game state (animals: " << gameState.animals.size() << ")" << std::endl;
             networkManager->SendGameState(gameState);
             lastGameStateSync = gameTime;
         }
@@ -1089,13 +1097,17 @@ public:
         }
         
         // Draw UI
-        DrawText(TextFormat("Score: %d", gameState.players[localPlayerId].score), 10, 10, 20, WHITE);
-        
-        const char* modeText = "Plant";
-        if (gameState.players[localPlayerId].mode == PlayerMode::SHOOT) modeText = "Shoot";
-        else if (gameState.players[localPlayerId].mode == PlayerMode::CHOP) modeText = "Chop";
-        
-        DrawText(TextFormat("Mode: %s (P to switch)", modeText), 10, 35, 20, WHITE);
+        if (gameState.players.find(localPlayerId) != gameState.players.end()) {
+            DrawText(TextFormat("Score: %d", gameState.players[localPlayerId].score), 10, 10, 20, WHITE);
+            
+            const char* modeText = "Plant";
+            if (gameState.players[localPlayerId].mode == PlayerMode::SHOOT) modeText = "Shoot";
+            else if (gameState.players[localPlayerId].mode == PlayerMode::CHOP) modeText = "Chop";
+            
+            DrawText(TextFormat("Mode: %s (P to switch)", modeText), 10, 35, 20, WHITE);
+        } else {
+            DrawText("Waiting for player initialization...", 10, 10, 20, YELLOW);
+        }
         DrawText("WASD/Arrows: Move, SPACE: Action", 10, 60, 16, WHITE);
         
         // Show sprite loading status and debug info
@@ -1114,7 +1126,8 @@ public:
         
         // Show shooting direction
         int uiOffset = spritesLoaded ? 80 : 100;
-        if (gameState.players[localPlayerId].mode == PlayerMode::SHOOT) {
+        if (gameState.players.find(localPlayerId) != gameState.players.end() &&
+            gameState.players[localPlayerId].mode == PlayerMode::SHOOT) {
             const char* dirText = "No direction";
             if (gameState.players[localPlayerId].lastDirectionX > 0) dirText = "Shooting →";
             else if (gameState.players[localPlayerId].lastDirectionX < 0) dirText = "Shooting ←";

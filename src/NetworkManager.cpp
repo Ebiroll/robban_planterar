@@ -231,6 +231,7 @@ extern "C" {
                      
                      // Parse animals
                      std::string animals_str = extractValue("animals");
+                     std::cout << "[C++] Parsing animals, length: " << animals_str.length() << std::endl;
                      current_pos = 0;
                      while(current_pos < animals_str.length()) {
                         size_t start_obj = animals_str.find('{', current_pos);
@@ -257,10 +258,12 @@ extern "C" {
                         a.y = std::stoi(extractAnimalValue("y"));
 
                         state.animals.push_back(a);
+                        std::cout << "[C++] Parsed animal ID: " << a.id << " at (" << a.x << "," << a.y << ")" << std::endl;
 
                         current_pos = end_obj + 1;
                      }
                      
+                     std::cout << "[C++] Total animals parsed: " << state.animals.size() << std::endl;
                      g_networkManager->OnFullGameState(state);
                 }
             } else if (type == "ASSIGN_PLAYER_ID") {
@@ -382,7 +385,10 @@ std::string SerializeGameState(const GameState& state) {
         first = false;
     }
     oss << "]}";
-    return oss.str();
+    
+    std::string result = oss.str();
+    std::cout << "[SERIALIZE] Game state with " << state.animals.size() << " animals, length: " << result.length() << std::endl;
+    return result;
 }
 
 NetworkManager::NetworkManager() {
