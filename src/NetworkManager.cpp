@@ -64,6 +64,7 @@ extern "C" {
             std::string type = extractType();
             // Only rebroadcast actions, not player moves (clients already see their own moves)
             if (type == "PLAYER_ACTION") {
+                std::cout << "[C++] Host rebroadcasting PLAYER_ACTION" << std::endl;
                 JS_BroadcastMessage(message);
             }
         }
@@ -156,8 +157,6 @@ extern "C" {
 
                 std::cout << "[C++] Player " << playerId << " changed mode to " << newMode << std::endl;
             } else if (type == "FULL_GAME_STATE") {
-                std::cout << "[C++] Full game state received" << std::endl;
-                std::cout << "[GAMESTATE] Deserializing game state" << std::endl;
                  if (g_networkManager) {
                     GameState state;
                     std::string grid_str = extractValue("grid");
@@ -284,6 +283,10 @@ extern "C" {
         std::cout << "[C++] Host game button clicked" << std::endl;
         if (g_networkManager) {
             g_networkManager->CreateRoom("RobbanRoom");
+            // Host automatically gets player ID 0
+            if (g_networkManager->onPlayerIdAssigned) {
+                g_networkManager->onPlayerIdAssigned(0);
+            }
         }
     }
     
@@ -328,7 +331,6 @@ ActionMessage DeserializeAction(const std::string& data) {
 std::string SerializeGameState(const GameState& state) {
     std::ostringstream oss;
     oss << "{\"type\":\"FULL_GAME_STATE\",";
-    std::cout << "[GAMESTATE] Serializing game state" << std::endl;
 
     // Serialize grid
     oss << "\"grid\":\"";

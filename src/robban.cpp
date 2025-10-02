@@ -253,6 +253,14 @@ private:
         
         // Set up network callbacks
         networkManager->SetPlayerIdAssignedCallback([this](int playerId) {
+            // Only accept player ID assignment once to prevent being overwritten
+            static bool idAssigned = false;
+            if (idAssigned) {
+                std::cout << "Ignoring duplicate player ID assignment: " << playerId << std::endl;
+                return;
+            }
+            
+            idAssigned = true;
             this->localPlayerId = playerId;
             std::cout << "Assigned player ID: " << playerId << std::endl;
             
@@ -308,6 +316,12 @@ private:
     }
     
     void OnPlayerUpdate(const Player& update) {
+        // Don't overwrite local player's state from network updates
+        // Local player is controlled by this client
+        if (update.id == localPlayerId) {
+            return;
+        }
+        
         if (gameState.players.find(update.id) != gameState.players.end()) {
             Player& player = gameState.players[update.id];
             player.x = update.x;
@@ -336,8 +350,27 @@ private:
     }
     
     void OnFullGameState(const GameState& state) {
-        std::cout << "[Game] Applying full game state..." << std::endl;
+        // Host doesn't need to apply its own game state broadcasts
+        if (isHost) {
+            return;
+        }
+        
+        std::cout << "[Game] Applying full game state from host..." << std::endl;
+        // Preserve local player ID and don't overwrite local player data
+        int preservedLocalId = localPlayerId;
+        Player preservedLocalPlayer;
+        bool hasLocalPlayer = gameState.players.find(localPlayerId) != gameState.players.end();
+        if (hasLocalPlayer) {
+            preservedLocalPlayer = gameState.players[localPlayerId];
+        }
+        
+        // Apply the received state
         gameState = state;
+        
+        // Restore local player if it was preserved
+        if (hasLocalPlayer) {
+            gameState.players[preservedLocalId] = preservedLocalPlayer;
+        }
     }
     
     void InitializeGrid() {
