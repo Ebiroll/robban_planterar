@@ -38,9 +38,9 @@ private:
     bool SendServerStatus(const std::string& jsonData);
     
 public:
-    FirebaseReporter(const std::string& serverId = "forest-server-001", 
+    FirebaseReporter(const std::string& serverId = "forest-server-001",
                     const std::string& serverName = "Robban's Scored Lobby",
-                    const std::string& firebaseUrl = "http://127.0.0.1:4000/flows/reportServerStatusFlow");
+                    const std::string& firebaseUrl = "https://studio--studio-4023979787-cd3b9.us-central1.hosted.app/");
     
     ~FirebaseReporter();
     

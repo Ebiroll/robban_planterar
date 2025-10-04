@@ -890,7 +890,14 @@ public:
         
         // Initialize Firebase reporter
         firebaseReporter = std::make_unique<FirebaseReporter>();
+        
+#ifdef PLATFORM_WEB
+        // Disable Firebase reporting on web due to CORS issues
+        firebaseReportingEnabled = false;
+        std::cout << "[Game] Firebase reporting disabled on web platform due to CORS restrictions" << std::endl;
+#else
         firebaseReportingEnabled = true;
+#endif
         
         // Don't create a player yet - wait for network initialization
         // The player will be created when:
