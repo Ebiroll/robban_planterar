@@ -1,6 +1,7 @@
 #include "raylib.h"
 #include "NetworkManager.h"
 #include "GameState.h"
+#include "FirebaseReporter.h"
 #include <vector>
 #include <map>
 #include <random>
@@ -179,6 +180,10 @@ private:
     bool isHost = false;
     std::string currentRoom;
     bool playerIdAssigned = false;  // Track if player ID has been assigned
+    
+    // Firebase reporting
+    std::unique_ptr<FirebaseReporter> firebaseReporter;
+    bool firebaseReportingEnabled = false;
     
     // Game state synchronization
 
@@ -883,6 +888,10 @@ public:
         LoadSprites();
         LoadSounds();
         
+        // Initialize Firebase reporter
+        firebaseReporter = std::make_unique<FirebaseReporter>();
+        firebaseReportingEnabled = true;
+        
         // Don't create a player yet - wait for network initialization
         // The player will be created when:
         // 1. The user hosts a game (they become player 0)
@@ -891,6 +900,11 @@ public:
     }
     
     ~RobbanPlanterar() {
+        // Stop Firebase reporting
+        if (firebaseReporter) {
+            firebaseReporter->Stop();
+        }
+        
         if (spritesLoaded && spriteSheet.id > 0) {
             UnloadTexture(spriteSheet);
             spritesLoaded = false;
@@ -921,6 +935,16 @@ public:
         #else
         audioResumed = true; // Native platforms don't need this
         #endif
+
+        // Start Firebase reporting when game starts or when hosting/joining
+        static bool firebaseStarted = false;
+        if (firebaseReportingEnabled && !firebaseStarted && firebaseReporter) {
+            firebaseReporter->Start();
+            firebaseReporter->UpdateGameState(gameState);
+            firebaseReporter->ReportNow(); // Initial report at startup
+            firebaseStarted = true;
+            std::cout << "[Game] Firebase reporting started" << std::endl;
+        }
 
         // Ensure local player exists before accessing
         if (gameState.players.find(localPlayerId) == gameState.players.end()) {
@@ -1057,6 +1081,16 @@ public:
         UpdateTrees();
         UpdateBullets();
         //SyncGameState();
+        
+        // Update Firebase reporter with current game state
+        if (firebaseReportingEnabled && firebaseReporter && firebaseStarted) {
+            firebaseReporter->UpdateGameState(gameState);
+            
+#ifdef PLATFORM_WEB
+            // Web implementation requires manual update from main loop
+            firebaseReporter->Update();
+#endif
+        }
         
         // Process network messages
         if (isMultiplayer && networkManager) {

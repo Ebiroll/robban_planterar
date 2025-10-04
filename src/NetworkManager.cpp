@@ -1,4 +1,5 @@
 #include "NetworkManager.h"
+#include "GameState.h"
 #include <iostream>
 #include <sstream>
 #include <random>

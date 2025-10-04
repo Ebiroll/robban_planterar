@@ -91,6 +91,7 @@ FetchContent_MakeAvailable(raylib)
 add_executable(robban_planterar
     robban.cpp
     NetworkManager.cpp
+    FirebaseReporter.cpp
 )
 
 # Link libraries
@@ -115,6 +116,9 @@ if(PLATFORM_WEB)
     # Export runtime methods needed for audio and networking (including heap arrays for Web Audio API)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','getValue','setValue','HEAPF32','HEAPU8','HEAP16','HEAPU16','HEAP32','HEAPU32','allocateUTF8','UTF8ToString']")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_FUNCTIONS=['_main','_malloc','_free','_OnPeerReady','_OnPlayerJoined','_OnPlayerLeft','_OnNetworkMessage','_OnHostGameClicked','_OnJoinGameClicked','_OnDisconnectClicked','_JS_InitPeerNetwork','_JS_CreateRoom','_JS_JoinRoom','_JS_BroadcastMessage','_JS_GetRoomId','_JS_GetConnectionCount','_JS_DisconnectPeer']")
+    
+    # Enable fetch API for web builds
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s FETCH=1")
 
     # Include JavaScript library for PeerJS networking
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --js-library ${CMAKE_SOURCE_DIR}/peer_network.js")
@@ -169,10 +173,16 @@ if(PLATFORM_WEB)
     
 elseif(WIN32)
     target_link_libraries(robban_planterar winmm)
+    # Add curl for Windows
+    find_package(CURL REQUIRED)
+    if(CURL_FOUND)
+        target_link_libraries(robban_planterar ${CURL_LIBRARIES})
+        target_include_directories(robban_planterar PRIVATE ${CURL_INCLUDE_DIRS})
+    endif()
 elseif(APPLE)
     target_link_libraries(robban_planterar "-framework CoreVideo -framework IOKit -framework Cocoa -framework GLUT -framework OpenGL")
 elseif(UNIX)
-    target_link_libraries(robban_planterar GL m pthread dl rt X11)
+    target_link_libraries(robban_planterar GL m pthread dl rt X11 curl)
 endif()
 
 # Compiler-specific options

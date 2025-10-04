@@ -1,5 +1,4 @@
 #pragma once
-#include "GameState.h"
 #include <string>
 #include <vector>
 #include <functional>
@@ -7,6 +6,10 @@
 #include <thread>
 #include <mutex>
 #include <queue>
+
+// Forward declarations to avoid circular dependency
+struct Player;
+struct GameState;
 
 // Simple message types for game networking
 enum class MessageType {
