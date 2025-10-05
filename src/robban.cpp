@@ -273,6 +273,11 @@ private:
             this->isMultiplayer = true;
             this->isHost = (playerId == 0);  // Player 0 is the host
             
+            // Update Firebase reporter with room ID when we have a network connection
+            if (this->firebaseReporter && !this->currentRoom.empty()) {
+                this->firebaseReporter->UpdateRoomId(this->currentRoom);
+            }
+            
             // Create the player if it doesn't exist yet
             if (this->gameState.players.find(playerId) == this->gameState.players.end()) {
                 Player localPlayer;
@@ -891,13 +896,9 @@ public:
         // Initialize Firebase reporter
         firebaseReporter = std::make_unique<FirebaseReporter>();
         
-#ifdef PLATFORM_WEB
-        // Disable Firebase reporting on web due to CORS issues
-        firebaseReportingEnabled = false;
-        std::cout << "[Game] Firebase reporting disabled on web platform due to CORS restrictions" << std::endl;
-#else
+        // Enable Firebase reporting on all platforms
         firebaseReportingEnabled = true;
-#endif
+        std::cout << "[Game] Firebase reporting enabled" << std::endl;
         
         // Don't create a player yet - wait for network initialization
         // The player will be created when:
@@ -1012,6 +1013,10 @@ public:
                     std::cout << "[Game] Failed to create room!" << std::endl;
                 } else {
                     std::cout << "[Game] Hosting room: " << networkManager->GetRoomId() << std::endl;
+                    // Update Firebase reporter with room ID
+                    if (firebaseReporter) {
+                        firebaseReporter->UpdateRoomId(networkManager->GetRoomId());
+                    }
                 }
             } else if (IsKeyPressed(KEY_J)) {
                 // Join a game (simplified - in real version would show input dialog)
@@ -1024,6 +1029,10 @@ public:
                     std::cout << "[Game] Failed to join room!" << std::endl;
                 } else {
                     std::cout << "[Game] Joining room: " << currentRoom << std::endl;
+                    // Update Firebase reporter with room ID
+                    if (firebaseReporter) {
+                        firebaseReporter->UpdateRoomId(currentRoom);
+                    }
                 }
             }
         }

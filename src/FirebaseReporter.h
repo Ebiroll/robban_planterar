@@ -17,6 +17,7 @@ class FirebaseReporter {
 private:
     std::string serverId;
     std::string serverName;
+    std::string roomId;
     std::string firebaseUrl;
     bool isRunning;
     
@@ -47,6 +48,7 @@ public:
     void Start();
     void Stop();
     void UpdateGameState(const GameState& gameState);
+    void UpdateRoomId(const std::string& roomId);
     void ReportNow();
     bool IsRunning() const { return isRunning; }
     

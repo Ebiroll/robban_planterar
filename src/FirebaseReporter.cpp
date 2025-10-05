@@ -44,6 +44,7 @@ void FirebaseReporter::Start() {
     
 #ifdef PLATFORM_WEB
     std::cout << "[Firebase] Reporter started (web mode)" << std::endl;
+    std::cout << "[Firebase] Report interval: " << reportInterval << " seconds" << std::endl;
 #else
     reporterThread = std::thread(&FirebaseReporter::ReporterLoop, this);
     std::cout << "[Firebase] Reporter started (native mode)" << std::endl;
@@ -71,6 +72,11 @@ void FirebaseReporter::UpdateGameState(const GameState& gameState) {
     lastReportedState = gameState;
 }
 
+void FirebaseReporter::UpdateRoomId(const std::string& roomId) {
+    this->roomId = roomId;
+    std::cout << "[Firebase] Room ID updated: " << roomId << std::endl;
+}
+
 void FirebaseReporter::ReportNow() {
 #ifndef PLATFORM_WEB
     std::lock_guard<std::mutex> lock(gameStateMutex);
@@ -93,6 +99,8 @@ void FirebaseReporter::Update() {
     // Report every minute (60 seconds)
     if (timeSinceLastReport >= reportInterval) {
         std::string jsonData = CreateServerStatusJson(lastReportedState);
+        std::cout << "[Firebase] Attempting to report server status (web mode)" << std::endl;
+        std::cout << "[Firebase] Time since last report: " << timeSinceLastReport << " seconds" << std::endl;
         
         if (SendServerStatus(jsonData)) {
             timeSinceLastReport = 0.0f;
@@ -155,6 +163,12 @@ std::string FirebaseReporter::CreateServerStatusJson(const GameState& gameState)
     json << "{\n";
     json << "  \"serverId\": \"" << serverId << "\",\n";
     json << "  \"serverName\": \"" << serverName << "\",\n";
+    
+    // Include room ID if available
+    if (!roomId.empty()) {
+        json << "  \"roomId\": \"" << roomId << "\",\n";
+    }
+    
     json << "  \"players\": [\n";
     
     bool firstPlayer = true;
@@ -177,6 +191,9 @@ std::string FirebaseReporter::CreateServerStatusJson(const GameState& gameState)
 bool FirebaseReporter::SendServerStatus(const std::string& jsonData) {
 #ifdef PLATFORM_WEB
     // Web implementation using emscripten_fetch
+    std::cout << "[Firebase] Sending data to: " << firebaseUrl << std::endl;
+    std::cout << "[Firebase] Data: " << jsonData << std::endl;
+    
     char* url = const_cast<char*>(firebaseUrl.c_str());
     char* data = const_cast<char*>(jsonData.c_str());
     
