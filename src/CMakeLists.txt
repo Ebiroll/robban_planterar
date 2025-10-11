@@ -115,7 +115,7 @@ if(PLATFORM_WEB)
     
     # Export runtime methods needed for audio and networking (including heap arrays for Web Audio API)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_RUNTIME_METHODS=['ccall','cwrap','getValue','setValue','HEAPF32','HEAPU8','HEAP16','HEAPU16','HEAP32','HEAPU32','allocateUTF8','UTF8ToString']")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_FUNCTIONS=['_main','_malloc','_free','_OnPeerReady','_OnPlayerJoined','_OnPlayerLeft','_OnNetworkMessage','_OnHostGameClicked','_OnJoinGameClicked','_OnDisconnectClicked','_JS_InitPeerNetwork','_JS_CreateRoom','_JS_JoinRoom','_JS_BroadcastMessage','_JS_GetRoomId','_JS_GetConnectionCount','_JS_DisconnectPeer']")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s EXPORTED_FUNCTIONS=['_main','_setUsername','_malloc','_free','_OnPeerReady','_OnPlayerJoined','_OnPlayerLeft','_OnNetworkMessage','_OnHostGameClicked','_OnJoinGameClicked','_OnDisconnectClicked','_JS_InitPeerNetwork','_JS_CreateRoom','_JS_JoinRoom','_JS_BroadcastMessage','_JS_GetRoomId','_JS_GetConnectionCount','_JS_DisconnectPeer']")
     
     # Enable fetch API for web builds
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s FETCH=1")

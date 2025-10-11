@@ -19,12 +19,16 @@ mergeInto(LibraryManager.library, {
 
         console.log('[PeerNetwork] Initializing...');
 
-        // Create peer with public PeerJS cloud server
+        // Create peer with public PeerJS cloud server and robust STUN/TURN config
         PeerNetworkState.peer = new Peer({
+            debug: 2, // Enable detailed logging
             config: {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' }
                 ]
             }
         });
@@ -35,7 +39,7 @@ mergeInto(LibraryManager.library, {
 
             // Notify C++ code that we're ready
             if (Module._OnPeerReady) {
-                var idPtr = Module.allocateUTF8(id);
+                var idPtr = stringToNewUTF8(id);
                 Module._OnPeerReady(idPtr);
                 Module._free(idPtr);
             }
@@ -54,7 +58,7 @@ mergeInto(LibraryManager.library, {
 
                 // Notify C++ code
                 if (Module._OnPlayerJoined) {
-                    var peerIdPtr = Module.allocateUTF8(conn.peer);
+                    var peerIdPtr = stringToNewUTF8(conn.peer);
                     Module._OnPlayerJoined(peerIdPtr);
                     Module._free(peerIdPtr);
                 }
@@ -66,7 +70,7 @@ mergeInto(LibraryManager.library, {
                 // Notify C++ code with message
                 if (Module._OnNetworkMessage) {
                     var dataStr = JSON.stringify(data);
-                    var dataPtr = Module.allocateUTF8(dataStr);
+                    var dataPtr = stringToNewUTF8(dataStr);
                     Module._OnNetworkMessage(dataPtr);
                     Module._free(dataPtr);
                 }
@@ -78,7 +82,7 @@ mergeInto(LibraryManager.library, {
 
                 // Notify C++ code
                 if (Module._OnPlayerLeft) {
-                    var peerIdPtr = Module.allocateUTF8(conn.peer);
+                    var peerIdPtr = stringToNewUTF8(conn.peer);
                     Module._OnPlayerLeft(peerIdPtr);
                     Module._free(peerIdPtr);
                 }
@@ -128,7 +132,7 @@ mergeInto(LibraryManager.library, {
 
             // Notify C++ code
             if (Module._OnPlayerJoined) {
-                var peerIdPtr = Module.allocateUTF8(conn.peer);
+                var peerIdPtr = stringToNewUTF8(conn.peer);
                 Module._OnPlayerJoined(peerIdPtr);
                 Module._free(peerIdPtr);
             }
@@ -140,7 +144,7 @@ mergeInto(LibraryManager.library, {
             // Notify C++ code with message
             if (Module._OnNetworkMessage) {
                 var dataStr = JSON.stringify(data);
-                var dataPtr = Module.allocateUTF8(dataStr);
+                var dataPtr = stringToNewUTF8(dataStr);
                 Module._OnNetworkMessage(dataPtr);
                 Module._free(dataPtr);
             }
@@ -152,7 +156,7 @@ mergeInto(LibraryManager.library, {
 
             // Notify C++ code
             if (Module._OnPlayerLeft) {
-                var peerIdPtr = Module.allocateUTF8(conn.peer);
+                var peerIdPtr = stringToNewUTF8(conn.peer);
                 Module._OnPlayerLeft(peerIdPtr);
                 Module._free(peerIdPtr);
             }

@@ -6,6 +6,15 @@
 #include <chrono>
 #include <algorithm>
 
+// Callback function pointer for peer ready event
+typedef void (*PeerReadyCallback)(const char* peerId);
+static PeerReadyCallback g_peerReadyCallback = nullptr;
+
+// Function to set the callback from outside
+extern "C" void SetPeerReadyCallback(PeerReadyCallback callback) {
+    g_peerReadyCallback = callback;
+}
+
 #ifdef PLATFORM_WEB
 #include <emscripten.h>
 
@@ -29,6 +38,11 @@ extern "C" {
     EMSCRIPTEN_KEEPALIVE
     void OnPeerReady(const char* peerId) {
         std::cout << "[C++] Peer ready with ID: " << peerId << std::endl;
+        
+        // Call the registered callback if available
+        if (g_peerReadyCallback) {
+            g_peerReadyCallback(peerId);
+        }
     }
     
     EMSCRIPTEN_KEEPALIVE
@@ -256,6 +270,12 @@ extern "C" {
                         std::string dirYStr = extractPlayerValue("dirY");
                         if (!dirXStr.empty()) p.lastDirectionX = std::stoi(dirXStr);
                         if (!dirYStr.empty()) p.lastDirectionY = std::stoi(dirYStr);
+                        
+                        // Extract username
+                        std::string usernameStr = extractPlayerValue("username");
+                        if (!usernameStr.empty()) {
+                            p.username = usernameStr;
+                        }
 
                         // Set player color based on ID (same as in AddPlayer)
                         const Color PLAYER_COLORS[] = {
@@ -403,6 +423,7 @@ std::string SerializeGameState(const GameState& state) {
             << ",\"alive\":" << (player.alive ? "true" : "false")
             << ",\"dirX\":" << player.lastDirectionX
             << ",\"dirY\":" << player.lastDirectionY
+            << ",\"username\":\"" << player.username << "\""
             << "}";
         first = false;
     }

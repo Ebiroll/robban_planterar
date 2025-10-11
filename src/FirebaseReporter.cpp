@@ -7,7 +7,6 @@
 
 #ifdef PLATFORM_WEB
 #include <emscripten.h>
-#include <emscripten/fetch.h>
 #else
 #include <curl/curl.h>
 #include <string>
@@ -28,7 +27,7 @@ FirebaseReporter::FirebaseReporter(const std::string& serverId,
     : serverId(serverId), serverName(serverName), firebaseUrl(firebaseUrl), isRunning(false) {
     this->serverId = "unique-server-identifier-123";
     this->serverName = "My Awesome Game Server";
-    this->firebaseUrl = "/";
+    this->firebaseUrl = "/api/server/status";
 #ifndef PLATFORM_WEB
     lastReportTime = std::chrono::steady_clock::now();
 #else
@@ -199,29 +198,20 @@ std::string FirebaseReporter::CreateServerStatusJson(const GameState& gameState)
 
 bool FirebaseReporter::SendServerStatus(const std::string& jsonData) {
 #ifdef PLATFORM_WEB
-    // Web implementation using emscripten_fetch
-    std::cout << "[Firebase] Sending data to: " << firebaseUrl << std::endl;
+    // Web implementation using JavaScript function window._ReportStatusToDashboard
+    std::cout << "[Firebase] Calling window._ReportStatusToDashboard" << std::endl;
     std::cout << "[Firebase] Data: " << jsonData << std::endl;
     
-    char* url = const_cast<char*>(firebaseUrl.c_str());
-    char* data = const_cast<char*>(jsonData.c_str());
+    // Call the JavaScript function directly using EM_ASM
+    EM_ASM({
+        var jsonString = UTF8ToString($0);
+        if (window._ReportStatusToDashboard) {
+            window._ReportStatusToDashboard(jsonString);
+        } else {
+            console.error('[Firebase] window._ReportStatusToDashboard not found!');
+        }
+    }, jsonData.c_str());
     
-    emscripten_fetch_attr_t attr;
-    emscripten_fetch_attr_init(&attr);
-    strcpy(attr.requestMethod, "POST");
-    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
-    attr.requestData = data;
-    attr.requestDataSize = strlen(data);
-    attr.onsuccess = [](emscripten_fetch_t* fetch) {
-        printf("[Firebase] HTTP request succeeded: %s\n", fetch->statusText);
-        emscripten_fetch_close(fetch);
-    };
-    attr.onerror = [](emscripten_fetch_t* fetch) {
-        printf("[Firebase] HTTP request failed: %s\n", fetch->statusText);
-        emscripten_fetch_close(fetch);
-    };
-    
-    emscripten_fetch(&attr, url);
     return true; // Assume success for web (async)
 #else
     // Native implementation using libcurl

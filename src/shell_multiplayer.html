@@ -170,7 +170,7 @@
             
             <div class="control-group">
                 <label for="username-input">Username:</label>
-                <input type="text" id="username-input" placeholder="Enter your username" value="Player">
+                <input type="text" id="username-input" placeholder="Enter your username" value="">
             </div>
             
             <div class="control-group">
@@ -219,7 +219,19 @@
         function hostGame() {
             console.log('[UI] Hosting game...');
             var username = document.getElementById('username-input').value;
-            Module.ccall('setUsername', null, ['string'], [username]);
+            
+            // Try to set username if the function is available
+            try {
+                if (Module.cwrap && Module._setUsername) {
+                    Module.ccall('setUsername', null, ['string'], [username]);
+                    console.log('[UI] Username set to:', username);
+                } else {
+                    console.warn('[UI] setUsername not available yet, using default');
+                }
+            } catch(e) {
+                console.warn('[UI] Error setting username:', e);
+            }
+            
             document.getElementById('room-info').classList.add('active');
             document.getElementById('connection-status').textContent = 'Hosting...';
             
@@ -253,7 +265,18 @@
             }
             
             var username = document.getElementById('username-input').value;
-            Module.ccall('setUsername', null, ['string'], [username]);
+            
+            // Try to set username if the function is available
+            try {
+                if (Module.cwrap && Module._setUsername) {
+                    Module.ccall('setUsername', null, ['string'], [username]);
+                    console.log('[UI] Username set to:', username);
+                } else {
+                    console.warn('[UI] setUsername not available yet, using default');
+                }
+            } catch(e) {
+                console.warn('[UI] Error setting username:', e);
+            }
             
             console.log('[UI] Joining game:', roomId);
             document.getElementById('room-info').classList.add('active');
@@ -273,6 +296,38 @@
             }, 1000);
         }
         
+        // ** NEW HELPER FUNCTION TO REPORT STATUS **
+        // This function should be called from your C++ code.
+        window._ReportStatusToDashboard = function(jsonStatus) {
+            // The API endpoint URL. Using a relative path ensures it always
+            // points to the same server that is hosting the game, whether
+            // it's localhost:3000 or your production domain.
+            const apiUrl = '/api/server/status';
+
+            console.log('[Dashboard] Reporting status via _ReportStatusToDashboard:', jsonStatus);
+
+            fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: jsonStatus, // jsonStatus is already a JSON string from C++
+            })
+            .then(response => {
+                if (!response.ok) {
+                    console.error(`[Dashboard] API request failed with status: ${response.status} (${response.statusText})`);
+                    return response.text().then(text => { throw new Error(text || 'Service Unavailable') });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('[Dashboard] API response:', data);
+            })
+            .catch(error => {
+                console.error('[Dashboard] Failed to report status:', error);
+            });
+        }
+
         function disconnectGame() {
             console.log('[UI] Disconnecting...');
             document.getElementById('room-info').classList.remove('active');
@@ -312,6 +367,21 @@
             monitorRunDependencies: function(left) {
                 this.totalDependencies = Math.max(this.totalDependencies, left);
                 Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+            },
+            onRuntimeInitialized: function() {
+                console.log('[Game] Runtime initialized');
+                
+                // Check for auto-join parameters after module is ready
+                const params = new URLSearchParams(window.location.search);
+                const roomId = params.get('roomId');
+                
+                if (roomId) {
+                    console.log('[Game] Auto-joining room:', roomId);
+                    setTimeout(() => {
+                        document.getElementById('room-id-input').value = roomId;
+                        joinGame();
+                    }, 500); // Small delay to ensure everything is ready
+                }
             }
         };
         
@@ -319,6 +389,25 @@
         window.onerror = function() {
             Module.setStatus('Exception thrown, see JavaScript console');
         };
+
+        // ** USERNAME INITIALIZATION **
+        document.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const username = params.get('username');
+
+            // Generate a random username if none provided
+            const usernameInput = document.getElementById('username-input');
+            if (username) {
+                console.log('Username found in URL:', username);
+                usernameInput.value = username;
+            } else if (!usernameInput.value) {
+                // Generate random username like "Player_1234"
+                const randomNum = Math.floor(Math.random() * 10000);
+                usernameInput.value = 'Player_' + randomNum;
+                console.log('Generated random username:', usernameInput.value);
+            }
+        });
+
     </script>
 </body>
 </html>

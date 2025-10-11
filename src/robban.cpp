@@ -15,6 +15,16 @@
 // Global username
 std::string globalUsername = "Player";
 
+// Global game instance pointer for callbacks
+class RobbanPlanterar; // Forward declaration
+RobbanPlanterar* g_gameInstance = nullptr;
+
+// Declare the SetPeerReadyCallback function from NetworkManager
+extern "C" void SetPeerReadyCallback(void (*callback)(const char*));
+
+// Forward declaration - will be defined after RobbanPlanterar class
+extern "C" void HandlePeerReady(const char* peerId);
+
 // Normal game mode
 
 // Sprite definitions
@@ -181,11 +191,9 @@ private:
     std::unique_ptr<NetworkManager> networkManager;
     bool isMultiplayer = false;
     bool isHost = false;
-    std::string currentRoom;
     bool playerIdAssigned = false;  // Track if player ID has been assigned
     
-    // Firebase reporting
-    std::unique_ptr<FirebaseReporter> firebaseReporter;
+    // Firebase reporting (firebaseReporter and currentRoom moved to public for callbacks)
     bool firebaseReportingEnabled = false;
     
     // Game state synchronization
@@ -808,6 +816,10 @@ private:
     }
 
 public:
+    // Make these accessible to extern "C" callbacks
+    std::unique_ptr<FirebaseReporter> firebaseReporter;
+    std::string currentRoom;
+    
     RobbanPlanterar() : rng(std::chrono::steady_clock::now().time_since_epoch().count()) {
         InitializeGrid();
         SetupNetworking();
@@ -1288,17 +1300,37 @@ extern "C" void setUsername(const char* name) {
     globalUsername = name;
 }
 
+// Callback function to handle peer ready event (defined after class to access members)
+extern "C" void HandlePeerReady(const char* peerId) {
+    std::cout << "[Game] HandlePeerReady called with peer ID: " << peerId << std::endl;
+    if (g_gameInstance && g_gameInstance->firebaseReporter) {
+        g_gameInstance->firebaseReporter->UpdateRoomId(peerId);
+        g_gameInstance->currentRoom = peerId;
+        g_gameInstance->firebaseReporter->ReportNow();
+        std::cout << "[Game] Firebase reporter updated with room ID: " << peerId << std::endl;
+    } else {
+        std::cout << "[Game] WARNING: Cannot update Firebase reporter (game instance or reporter is null)" << std::endl;
+    }
+}
+
 int main() {
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Robban Planterar");
     SetTargetFPS(60);
     
     RobbanPlanterar game;
+    g_gameInstance = &game;  // Set global pointer for callbacks
+    
+    // Register the peer ready callback
+    #ifdef PLATFORM_WEB
+    SetPeerReadyCallback(HandlePeerReady);
+    #endif
     
     while (!WindowShouldClose()) {
         game.Update();
         game.Draw();
     }
     
+    g_gameInstance = nullptr;  // Clean up
     CloseWindow();
     return 0;
 }
