@@ -45,6 +45,7 @@ struct Player {
     int lastDirectionX = 0; // For shooting direction
     int lastDirectionY = 0;
     float lastMove = 0.0f;  // For movement throttling
+    std::string username;
 };
 
 struct Animal {

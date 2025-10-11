@@ -169,6 +169,11 @@
             <h3>Multiplayer Setup</h3>
             
             <div class="control-group">
+                <label for="username-input">Username:</label>
+                <input type="text" id="username-input" placeholder="Enter your username" value="Player">
+            </div>
+            
+            <div class="control-group">
                 <button class="host-btn" onclick="hostGame()">🎮 Host Game</button>
                 <span style="margin: 0 10px;">or</span>
                 <button class="join-btn" onclick="showJoinInput()">🔗 Join Game</button>
@@ -213,6 +218,8 @@
         // Multiplayer UI Functions
         function hostGame() {
             console.log('[UI] Hosting game...');
+            var username = document.getElementById('username-input').value;
+            Module.ccall('setUsername', null, ['string'], [username]);
             document.getElementById('room-info').classList.add('active');
             document.getElementById('connection-status').textContent = 'Hosting...';
             
@@ -244,6 +251,9 @@
                 alert('Please enter a Room ID');
                 return;
             }
+            
+            var username = document.getElementById('username-input').value;
+            Module.ccall('setUsername', null, ['string'], [username]);
             
             console.log('[UI] Joining game:', roomId);
             document.getElementById('room-info').classList.add('active');

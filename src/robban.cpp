@@ -12,6 +12,9 @@
 #include <iostream>
 #include <stdint.h>
 
+// Global username
+std::string globalUsername = "Player";
+
 // Normal game mode
 
 // Sprite definitions
@@ -187,6 +190,8 @@ private:
     
     // Game state synchronization
 
+    // Player management
+
     // Sprite helper functions - MUST be defined before other functions that use them
     void LoadSprites() {
         spriteSheet = LoadTexture("robban.png");
@@ -283,6 +288,7 @@ private:
                 Player localPlayer;
                 localPlayer.id = playerId;
                 localPlayer.color = PLAYER_COLORS[playerId % 8];
+                localPlayer.username = globalUsername;
                 this->gameState.players[playerId] = localPlayer;
                 this->SpawnPlayer(playerId);
             }
@@ -417,91 +423,6 @@ private:
         gameState.grid[player.y][player.x].type = CellType::EMPTY;
     }
 
-    void UpdateBullets() {
-        const float BULLET_SPEED = 8.0f; // cells per second
-        const float BULLET_LIFETIME = 2.0f; // seconds
-        
-        for (auto it = gameState.bullets.begin(); it != gameState.bullets.end();) {
-            Bullet& bullet = *it;
-            
-            // Remove old bullets
-            if (gameTime - bullet.startTime > BULLET_LIFETIME) {
-                it = gameState.bullets.erase(it);
-                continue;
-            }
-            
-            if (!bullet.active) {
-                it = gameState.bullets.erase(it);
-                continue;
-            }
-            
-            // Calculate how far the bullet should have traveled
-            float travelTime = gameTime - bullet.startTime;
-            float distance = travelTime * BULLET_SPEED;
-            
-            int newX = bullet.x + static_cast<int>(bullet.dirX * distance);
-            int newY = bullet.y + static_cast<int>(bullet.dirY * distance);
-            
-            // Check bounds
-            if (newX < 0 || newX >= GRID_WIDTH || newY < 0 || newY >= GRID_HEIGHT) {
-                it = gameState.bullets.erase(it);
-                continue;
-            }
-            
-            // Check for hits with animals
-            for (auto animalIt = gameState.animals.begin(); animalIt != gameState.animals.end(); ++animalIt) {
-                if (animalIt->x == newX && animalIt->y == newY) {
-                    // Hit animal
-                    if (gameState.players.find(bullet.playerId) != gameState.players.end()) {
-                        gameState.players[bullet.playerId].score += 5;
-                    }
-                    gameState.animals.erase(animalIt);
-                    bullet.active = false;
-                    break;
-                }
-            }
-            
-            if (!bullet.active) {
-                it = gameState.bullets.erase(it);
-                continue;
-            }
-            
-            // Check for hits with other players
-            for (auto& [id, otherPlayer] : gameState.players) {
-                if (id != bullet.playerId && otherPlayer.x == newX && otherPlayer.y == newY && otherPlayer.alive) {
-                    otherPlayer.alive = false;
-                    if (gameState.players.find(bullet.playerId) != gameState.players.end()) {
-                        gameState.players[bullet.playerId].score -= 5;
-                    }
-                    
-                    // Create grave
-                    gameState.grid[newY][newX].type = CellType::GRAVE;
-                    gameState.grid[newY][newX].playerId = id;
-                    
-                    // Respawn the killed player
-                    SpawnPlayer(id);
-                    bullet.active = false;
-                    break;
-                }
-            }
-            
-            if (!bullet.active) {
-                it = gameState.bullets.erase(it);
-                continue;
-            }
-            
-            // Check for obstacles (trees)
-            Cell& cell = gameState.grid[newY][newX];
-            if (cell.type == CellType::TREE_MATURE || cell.type == CellType::TREE_YOUNG) {
-                bullet.active = false;
-                it = gameState.bullets.erase(it);
-                continue;
-            }
-            
-            ++it;
-        }
-    }
-    
     void UpdateAnimals() {
         // Only host spawns and updates animals
         if (!isHost) {
@@ -927,6 +848,91 @@ public:
         CloseAudioDevice();
     }
 
+    void UpdateBullets() {
+        const float BULLET_SPEED = 8.0f; // cells per second
+        const float BULLET_LIFETIME = 2.0f; // seconds
+        
+        for (auto it = gameState.bullets.begin(); it != gameState.bullets.end();) {
+            Bullet& bullet = *it;
+            
+            // Remove old bullets
+            if (gameTime - bullet.startTime > BULLET_LIFETIME) {
+                it = gameState.bullets.erase(it);
+                continue;
+            }
+            
+            if (!bullet.active) {
+                it = gameState.bullets.erase(it);
+                continue;
+            }
+            
+            // Calculate how far the bullet should have traveled
+            float travelTime = gameTime - bullet.startTime;
+            float distance = travelTime * BULLET_SPEED;
+            
+            int newX = bullet.x + static_cast<int>(bullet.dirX * distance);
+            int newY = bullet.y + static_cast<int>(bullet.dirY * distance);
+            
+            // Check bounds
+            if (newX < 0 || newX >= GRID_WIDTH || newY < 0 || newY >= GRID_HEIGHT) {
+                it = gameState.bullets.erase(it);
+                continue;
+            }
+            
+            // Check for hits with animals
+            for (auto animalIt = gameState.animals.begin(); animalIt != gameState.animals.end(); ++animalIt) {
+                if (animalIt->x == newX && animalIt->y == newY) {
+                    // Hit animal
+                    if (gameState.players.find(bullet.playerId) != gameState.players.end()) {
+                        gameState.players[bullet.playerId].score += 5;
+                    }
+                    gameState.animals.erase(animalIt);
+                    bullet.active = false;
+                    break;
+                }
+            }
+            
+            if (!bullet.active) {
+                it = gameState.bullets.erase(it);
+                continue;
+            }
+            
+            // Check for hits with other players
+            for (auto& [id, otherPlayer] : gameState.players) {
+                if (id != bullet.playerId && otherPlayer.x == newX && otherPlayer.y == newY && otherPlayer.alive) {
+                    otherPlayer.alive = false;
+                    if (gameState.players.find(bullet.playerId) != gameState.players.end()) {
+                        gameState.players[bullet.playerId].score -= 5;
+                    }
+                    
+                    // Create grave
+                    gameState.grid[newY][newX].type = CellType::GRAVE;
+                    gameState.grid[newY][newX].playerId = id;
+                    
+                    // Respawn the killed player
+                    SpawnPlayer(id);
+                    bullet.active = false;
+                    break;
+                }
+            }
+            
+            if (!bullet.active) {
+                it = gameState.bullets.erase(it);
+                continue;
+            }
+            
+            // Check for obstacles (trees)
+            Cell& cell = gameState.grid[newY][newX];
+            if (cell.type == CellType::TREE_MATURE || cell.type == CellType::TREE_YOUNG) {
+                bullet.active = false;
+                it = gameState.bullets.erase(it);
+                continue;
+            }
+            
+            ++it;
+        }
+    }
+
     void Update() {
         gameTime = GetTime();
 
@@ -949,7 +955,7 @@ public:
         if (firebaseReportingEnabled && !firebaseStarted && firebaseReporter) {
             firebaseReporter->Start();
             firebaseReporter->UpdateGameState(gameState);
-            firebaseReporter->ReportNow(); // Initial report at startup
+            // firebaseReporter->ReportNow(); // Initial report at startup - removed to report only after room is set
             firebaseStarted = true;
             std::cout << "[Game] Firebase reporting started" << std::endl;
         }
@@ -1012,10 +1018,14 @@ public:
                     isHost = false;
                     std::cout << "[Game] Failed to create room!" << std::endl;
                 } else {
-                    std::cout << "[Game] Hosting room: " << networkManager->GetRoomId() << std::endl;
+                    std::string actualRoomId = networkManager->GetRoomId();
+                    std::cout << "[Game] Hosting room: " << actualRoomId << std::endl;
+                    std::cout << "[Game] Created room with ID: " << actualRoomId << std::endl;
                     // Update Firebase reporter with room ID
                     if (firebaseReporter) {
-                        firebaseReporter->UpdateRoomId(networkManager->GetRoomId());
+                        std::cout << "[Game] Updating Firebase with room ID: " << actualRoomId << std::endl;
+                        firebaseReporter->UpdateRoomId(actualRoomId);
+                        firebaseReporter->ReportNow();
                     }
                 }
             } else if (IsKeyPressed(KEY_J)) {
@@ -1029,9 +1039,12 @@ public:
                     std::cout << "[Game] Failed to join room!" << std::endl;
                 } else {
                     std::cout << "[Game] Joining room: " << currentRoom << std::endl;
+                    std::cout << "[Game] Join successful, room ID: " << currentRoom << std::endl;
                     // Update Firebase reporter with room ID
                     if (firebaseReporter) {
+                        std::cout << "[Game] Updating Firebase with room ID: " << currentRoom << std::endl;
                         firebaseReporter->UpdateRoomId(currentRoom);
+                        firebaseReporter->ReportNow();
                     }
                 }
             }
@@ -1081,7 +1094,7 @@ public:
         // Action with spacebar
         if (IsKeyPressed(KEY_SPACE)) {
             HandlePlayerAction(localPlayerId, -1, -1); // Use -1 to indicate current position
-            
+
             // Send action to network if multiplayer
             if (isMultiplayer && networkManager && networkManager->IsConnected()) {
                 ActionMessage action;
@@ -1092,22 +1105,81 @@ public:
                 networkManager->SendPlayerAction(action);
             }
         }
-        
+
+        // Touch input for mobile
+        if (GetTouchPointCount() > 0) {
+            Vector2 touchPos = GetTouchPosition(0);
+            // Check upper right corner for tool switch
+            if (touchPos.x > WINDOW_WIDTH * 0.75f && touchPos.y < WINDOW_HEIGHT * 0.25f) {
+                // Switch tool
+                switch (localPlayer.mode) {
+                    case PlayerMode::PLANT: localPlayer.mode = PlayerMode::SHOOT; break;
+                    case PlayerMode::SHOOT: localPlayer.mode = PlayerMode::CHOP; break;
+                    case PlayerMode::CHOP: localPlayer.mode = PlayerMode::PLANT; break;
+                }
+
+                // Send mode change to network
+                if (isMultiplayer && networkManager && networkManager->IsConnected()) {
+                    networkManager->SendPlayerModeChange(localPlayerId, static_cast<int>(localPlayer.mode));
+                }
+            }
+            // Check bottom left and bottom right for shoot
+            else if ((touchPos.x < WINDOW_WIDTH * 0.25f && touchPos.y > WINDOW_HEIGHT * 0.75f) ||
+                     (touchPos.x > WINDOW_WIDTH * 0.75f && touchPos.y > WINDOW_HEIGHT * 0.75f)) {
+                // Shoot action
+                HandlePlayerAction(localPlayerId, -1, -1);
+
+                // Send action to network if multiplayer
+                if (isMultiplayer && networkManager && networkManager->IsConnected()) {
+                    ActionMessage action;
+                    action.playerId = localPlayerId;
+                    action.targetX = localPlayer.x;
+                    action.targetY = localPlayer.y;
+                    action.actionType = static_cast<int>(localPlayer.mode);
+                    networkManager->SendPlayerAction(action);
+                }
+            }
+            // Check above player for move up
+            else if (touchPos.y < localPlayer.y * CELL_SIZE) {
+                // Move up
+                int newY = localPlayer.y - 1;
+                if (newY >= 0) {
+                    localPlayer.y = newY;
+                    localPlayer.lastDirectionX = 0;
+                    localPlayer.lastDirectionY = -1;
+                    localPlayer.lastMove = gameTime;
+                }
+            }
+            // Check to the right of player for move right
+            else if (touchPos.x > (localPlayer.x + 1) * CELL_SIZE) {
+                // Move right
+                int newX = localPlayer.x + 1;
+                if (newX < GRID_WIDTH) {
+                    localPlayer.x = newX;
+                    localPlayer.lastDirectionX = 1;
+                    localPlayer.lastDirectionY = 0;
+                    localPlayer.lastMove = gameTime;
+                }
+            }
+        }
+
+
+
         UpdateAnimals();
         UpdateTrees();
         UpdateBullets();
         //SyncGameState();
-        
+
         // Update Firebase reporter with current game state
         if (firebaseReportingEnabled && firebaseReporter && firebaseStarted) {
             firebaseReporter->UpdateGameState(gameState);
-            
+
 #ifdef PLATFORM_WEB
             // Web implementation requires manual update from main loop
             firebaseReporter->Update();
 #endif
         }
-        
+
         // Process network messages
         if (isMultiplayer && networkManager) {
             networkManager->ProcessMessages();
@@ -1211,6 +1283,10 @@ public:
         gameState.players.erase(playerId);
     }
 };
+
+extern "C" void setUsername(const char* name) {
+    globalUsername = name;
+}
 
 int main() {
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Robban Planterar");

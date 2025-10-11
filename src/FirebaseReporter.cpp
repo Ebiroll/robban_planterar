@@ -26,6 +26,9 @@ FirebaseReporter::FirebaseReporter(const std::string& serverId,
                                  const std::string& serverName,
                                  const std::string& firebaseUrl)
     : serverId(serverId), serverName(serverName), firebaseUrl(firebaseUrl), isRunning(false) {
+    this->serverId = "unique-server-identifier-123";
+    this->serverName = "My Awesome Game Server";
+    this->firebaseUrl = "/";
 #ifndef PLATFORM_WEB
     lastReportTime = std::chrono::steady_clock::now();
 #else
@@ -75,6 +78,7 @@ void FirebaseReporter::UpdateGameState(const GameState& gameState) {
 void FirebaseReporter::UpdateRoomId(const std::string& roomId) {
     this->roomId = roomId;
     std::cout << "[Firebase] Room ID updated: " << roomId << std::endl;
+    std::cout << "[Firebase] Triggering immediate report with new room ID" << std::endl;
 }
 
 void FirebaseReporter::ReportNow() {
@@ -82,6 +86,7 @@ void FirebaseReporter::ReportNow() {
     std::lock_guard<std::mutex> lock(gameStateMutex);
 #endif
     std::string jsonData = CreateServerStatusJson(lastReportedState);
+    std::cout << "[Firebase] Reporting server status now" << jsonData << std::endl;
     SendServerStatus(jsonData);
 #ifndef PLATFORM_WEB
     lastReportTime = std::chrono::steady_clock::now();
@@ -160,6 +165,8 @@ void FirebaseReporter::WebTimerCallback(void* userData) {
 std::string FirebaseReporter::CreateServerStatusJson(const GameState& gameState) {
     std::ostringstream json;
     
+    std::cout << "[Firebase] CreateServerStatusJson - roomId: '" << roomId << "' (empty=" << (roomId.empty() ? "yes" : "no") << ")" << std::endl;
+    
     json << "{\n";
     json << "  \"serverId\": \"" << serverId << "\",\n";
     json << "  \"serverName\": \"" << serverName << "\",\n";
@@ -167,6 +174,8 @@ std::string FirebaseReporter::CreateServerStatusJson(const GameState& gameState)
     // Include room ID if available
     if (!roomId.empty()) {
         json << "  \"roomId\": \"" << roomId << "\",\n";
+    } else {
+        std::cout << "[Firebase] WARNING: roomId is empty, skipping from JSON" << std::endl;
     }
     
     json << "  \"players\": [\n";
@@ -177,7 +186,7 @@ std::string FirebaseReporter::CreateServerStatusJson(const GameState& gameState)
             json << ",\n";
         }
         
-        json << "    { \"userId\": \"player_" << player.id << "\", \"score\": " << player.score << " }";
+        json << "    { \"userId\": \"" << (player.username.empty() ? "player_" + std::to_string(player.id) : player.username) << "\", \"score\": " << player.score << " }";
         firstPlayer = false;
     }
     
