@@ -1,0 +1,79 @@
+{
+  "name": "Emscripten Development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+
+  // Configure tool-specific properties
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.profiles.linux": {
+          "bash": {
+            "path": "/bin/bash",
+            "args": ["-c", "source /emsdk/emsdk_env.sh && exec bash"]
+          }
+        },
+        "cmake.configureOnOpen": false,
+        "files.exclude": {
+          "**/build": true,
+          "**/out": true
+        }
+      },
+
+      "extensions": [
+        "ms-vscode.cpptools",
+        "ms-vscode.cmake-tools",
+        "twxs.cmake",
+        "eamodio.gitlens"
+      ]
+    }
+  },
+
+  // Forward ports for Emscripten HTTP server
+  "forwardPorts": [8000, 8080],
+  "portsAttributes": {
+    "8000": {
+      "label": "Emscripten HTTP Server",
+      "onAutoForward": "notify"
+    },
+    "8080": {
+      "label": "Alternative Port",
+      "onAutoForward": "silent"
+    }
+  },
+
+  // Use 'postCreateCommand' to run commands after the container is created
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  // Set environment variables
+  "containerEnv": {
+    "EMSDK": "/emsdk",
+    "EM_CONFIG": "/emsdk/.emscripten"
+  },
+
+  // Mount the workspace
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace",
+
+  // Use root user for compatibility
+  "remoteUser": "root",
+
+  // Keep container running
+  "overrideCommand": true,
+
+  // Features to add (optional)
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest"
+    }
+  },
+
+  // Mounts for better performance and caching
+  "mounts": [
+    "source=robban-build,target=${containerWorkspaceFolder}/src/build,type=volume",
+    "source=robban-out,target=${containerWorkspaceFolder}/src/out,type=volume"
+  ]
+}

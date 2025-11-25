@@ -160,6 +160,7 @@ extern "C" {
                 std::string aliveStr = extractValue("alive");
                 std::string dirXStr = extractValue("dirX");
                 std::string dirYStr = extractValue("dirY");
+                std::string usernameStr = extractValue("username");
 
                 if (!idStr.empty()) update.id = std::stoi(idStr);
                 if (!xStr.empty()) update.x = std::stoi(xStr);
@@ -169,6 +170,8 @@ extern "C" {
                 update.alive = (aliveStr == "true");
                 if (!dirXStr.empty()) update.lastDirectionX = std::stoi(dirXStr);
                 if (!dirYStr.empty()) update.lastDirectionY = std::stoi(dirYStr);
+                if (!usernameStr.empty()) update.username = usernameStr;
+
 
                 // Update player if we have a valid network manager
                 if (g_networkManager) {
@@ -575,7 +578,8 @@ void NetworkManager::SendPlayerUpdate(const Player& update) {
          << ",\"mode\":" << static_cast<int>(update.mode) << ",\"score\":" << update.score
          << ",\"alive\":" << (update.alive ? "true" : "false")
          << ",\"dirX\":" << update.lastDirectionX
-         << ",\"dirY\":" << update.lastDirectionY << "}";
+         << ",\"dirY\":" << update.lastDirectionY 
+         << ",\"username\":\"" << update.username << "\"}"; 
     
     JS_BroadcastMessage(json.str().c_str());
     #else

@@ -130,6 +130,9 @@ mergeInto(LibraryManager.library, {
             console.log('[PeerNetwork] Connection opened with:', conn.peer);
             PeerNetworkState.connections[conn.peer] = conn;
 
+            console.log('[PeerNetwork] Setting up connection handlers for:', conn.peer || 'new connection');
+
+
             // Notify C++ code
             if (Module._OnPlayerJoined) {
                 var peerIdPtr = stringToNewUTF8(conn.peer);

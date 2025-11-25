@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <iostream>
 #include <stdint.h>
+#include <cmath>
 
 // Global username
 std::string globalUsername = "Player";
@@ -230,7 +231,7 @@ private:
         }
     }
     
-    void DrawSprite(SpriteIndex index, int x, int y, Color tint = WHITE, bool flipX = false) {
+    void DrawSprite(SpriteIndex index, int x, int y, Color tint = WHITE, bool flipX = false, float rotation = 0.0f) {
         if (!spritesLoaded || spriteSheet.id == 0) return;
         
         SpriteRect rect = spriteRects[index];
@@ -264,7 +265,9 @@ private:
             debugCount++;
         }
         
-        DrawTexturePro(spriteSheet, source, dest, {0, 0}, 0.0f, tint);
+        // Use origin {0,0} to draw sprite at exact position without offset
+        Vector2 origin = {0.0f, 0.0f};
+        DrawTexturePro(spriteSheet, source, dest, origin, rotation * RAD2DEG, tint);
     }
 
     void SetupNetworking() {
@@ -299,6 +302,12 @@ private:
                 localPlayer.username = globalUsername;
                 this->gameState.players[playerId] = localPlayer;
                 this->SpawnPlayer(playerId);
+                             
+                // Immediately send player update to share username with other players
+                if (this->networkManager && this->networkManager->IsConnected()) {
+                    std::cout << "Sending initial player state with username: " << globalUsername << std::endl;
+                    this->networkManager->SendPlayerUpdate(this->gameState.players[playerId]);
+                }
             }
         });
 
@@ -355,6 +364,9 @@ private:
             player.alive = update.alive;
             player.lastDirectionX = update.lastDirectionX;
             player.lastDirectionY = update.lastDirectionY;
+            if (!update.username.empty()) {
+                player.username = update.username;
+            }
         } else {
             // If player doesn't exist yet, add them
             AddPlayer(update.id);
@@ -366,6 +378,10 @@ private:
             player.alive = update.alive;
             player.lastDirectionX = update.lastDirectionX;
             player.lastDirectionY = update.lastDirectionY;
+            // Set username if provided
+            if (!update.username.empty()) {
+                player.username = update.username;
+            }
         }
     }
     

@@ -46,6 +46,9 @@ struct Player {
     int lastDirectionY = 0;
     float lastMove = 0.0f;  // For movement throttling
     std::string username;
+    float rotationAngle = 0.0f; // Current rotation in radians (0 = facing north/+Z)
+    float targetRotationAngle = 0.0f; // Target rotation for animation
+    float rotationSpeed = 8.0f; // Radians per second for rotation animation
 };
 
 struct Animal {
